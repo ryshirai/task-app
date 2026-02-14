@@ -36,7 +36,7 @@ services:
       - dev-cargo:/home/vscode/.cargo
       - dev-rustup:/home/vscode/.rustup
       - dev-node:/home/vscode/.local/share/pnpm
-      - ai-cache:/home/vscode/.config
+      - ai-cache:/home/vscode/.codex
     working_dir: /workspace
     environment:
       - RUST_BACKTRACE=1
