@@ -1,0 +1,28 @@
+{
+  "name": "task-app",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "dev",
+  "workspaceFolder": "/workspace",
+  "remoteUser": "vscode",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb",
+        "tamasfe.even-better-toml",
+        "svelte.svelte-vscode",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "editor.formatOnSave": true
+      }
+    }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+        "installDockerBuildx": true,
+        "version": "latest"
+      }
+  },
+  "postCreateCommand": "bash -lc 'corepack enable && (cd frontend && [ -f package.json ] && pnpm -v >/dev/null 2>&1 || true)'"
+}

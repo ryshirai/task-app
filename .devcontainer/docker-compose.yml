@@ -1,0 +1,49 @@
+services:
+  dev:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+      target: dev
+      args:
+        # .envがあればその値を、なければデフォルト1000を使う
+        - USER_UID=${LOCAL_UID:-1000}
+        - USER_GID=${LOCAL_GID:-1000}
+    container_name: task-app-dev
+    volumes:
+      - ..:/workspace:cached
+      - dev-cargo:/home/vscode/.cargo
+      - dev-rustup:/home/vscode/.rustup
+      - dev-node:/home/vscode/.local/share/pnpm
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /workspace
+    environment:
+      - RUST_BACKTRACE=1
+    command: sleep infinity
+
+  ai:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+      target: ai
+      args:
+        # .envがあればその値を、なければデフォルト1000を使う
+        - USER_UID=${LOCAL_UID:-1000}
+        - USER_GID=${LOCAL_GID:-1000}
+    container_name: task-app-ai
+    volumes:
+      - ..:/workspace:cached
+      # AIコンテナでもRust/Nodeのキャッシュを共有して高速化
+      - dev-cargo:/home/vscode/.cargo
+      - dev-rustup:/home/vscode/.rustup
+      - dev-node:/home/vscode/.local/share/pnpm
+      - ai-cache:/home/vscode/.config
+    working_dir: /workspace
+    environment:
+      - RUST_BACKTRACE=1
+    command: sleep infinity
+
+volumes:
+  dev-cargo:
+  dev-rustup:
+  dev-node:
+  ai-cache:

@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "AI: Open shell (ai container)",
+      "type": "shell",
+      "command": "docker exec -it -u vscode task-app-ai bash -c codex",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    }
+  ]
+}
