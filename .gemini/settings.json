@@ -1,10 +1,11 @@
 {
   "mcpServers": {
     "codex": {
-      "command": "codex",
+      "command": "/usr/bin/codex",
       "args": [
         "mcp-server"
-      ]
+      ],
+      "trust": true
     }
   }
 }
