@@ -49,6 +49,7 @@ export interface DailyReport {
 export interface Invitation {
     id: number;
     organization_id: number;
+    org_name?: string | null;
     token: string;
     role: UserRole;
     expires_at: string;

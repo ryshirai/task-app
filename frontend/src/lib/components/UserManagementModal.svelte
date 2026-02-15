@@ -71,7 +71,7 @@
   <div class="p-6 bg-white">
     <div class="flex justify-between items-center mb-6">
       <h3 class="text-xl font-bold text-slate-800">ユーザー管理</h3>
-      <button on:click={handleClose} class="text-slate-400 hover:text-slate-600">
+      <button on:click={handleClose} class="text-slate-400 hover:text-slate-600" aria-label="ユーザー管理を閉じる">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
@@ -117,6 +117,7 @@
                 on:click={() => handleDeleteMember(member.id)}
                 class="text-slate-300 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition-all"
                 title="削除"
+                aria-label={`${member.name}を削除`}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
               </button>

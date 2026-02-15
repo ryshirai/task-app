@@ -76,7 +76,7 @@
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
     <div class="p-6 border-b border-slate-100 flex items-center justify-between">
       <h2 class="text-xl font-bold text-slate-800">{existingReport ? '日報を編集' : '日報作成'} ({reportDate})</h2>
-      <button on:click={() => dispatch('close')} class="text-slate-400 hover:text-slate-600 transition-colors">
+      <button on:click={() => dispatch('close')} class="text-slate-400 hover:text-slate-600 transition-colors" aria-label="日報モーダルを閉じる">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
