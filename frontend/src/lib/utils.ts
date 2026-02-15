@@ -62,3 +62,20 @@ export function snapTo15Min(date: Date): Date {
     snappedDate.setMinutes(snappedMinutes, 0, 0);
     return snappedDate;
 }
+
+export function toLocalISOString(date: Date): string {
+    const tzo = -date.getTimezoneOffset();
+    const dif = tzo >= 0 ? '+' : '-';
+    const pad = (num: number) => String(num).padStart(2, '0');
+    const padMs = (num: number) => String(num).padStart(3, '0');
+
+    return date.getFullYear() +
+        '-' + pad(date.getMonth() + 1) +
+        '-' + pad(date.getDate()) +
+        'T' + pad(date.getHours()) +
+        ':' + pad(date.getMinutes()) +
+        ':' + pad(date.getSeconds()) +
+        '.' + padMs(date.getMilliseconds()) +
+        dif + pad(Math.floor(Math.abs(tzo) / 60)) +
+        ':' + pad(Math.abs(tzo) % 60);
+}

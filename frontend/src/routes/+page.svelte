@@ -11,6 +11,8 @@
   import { TaskWebSocketClient } from '$lib/websocket';
   import { type User, type Task } from '$lib/types';
   import { auth, logout } from '$lib/auth';
+  import { toLocalISOString } from '$lib/utils';
+  import { upsertTask } from '$lib/taskUtils';
   import { onMount, onDestroy } from 'svelte';
 
   let users: User[] = [];
@@ -69,38 +71,11 @@
   type TaskDeletedPayload = { id: number };
 
   function applyTaskCreated(task: Task) {
-    const user = users.find(u => u.id === task.member_id);
-    if (!user) return;
-    if (user.tasks.some(t => t.id === task.id)) return;
-    user.tasks.push(task);
-    users = users;
+    users = upsertTask(users, task);
   }
 
   function applyTaskUpdated(task: Task) {
-    let changed = false;
-
-    const previousUser = users.find(u => u.tasks.some(t => t.id === task.id));
-    if (previousUser && previousUser.id !== task.member_id) {
-      const previousTaskIndex = previousUser.tasks.findIndex(t => t.id === task.id);
-      if (previousTaskIndex !== -1) {
-        previousUser.tasks.splice(previousTaskIndex, 1);
-        changed = true;
-      }
-    }
-
-    const currentUser = users.find(u => u.id === task.member_id);
-    if (!currentUser) {
-      if (changed) users = users;
-      return;
-    }
-
-    const currentTaskIndex = currentUser.tasks.findIndex(t => t.id === task.id);
-    if (currentTaskIndex !== -1) {
-      currentUser.tasks[currentTaskIndex] = task;
-    } else {
-      currentUser.tasks.push(task);
-    }
-    users = users;
+    users = upsertTask(users, task);
   }
 
   function applyTaskDeleted(payload: TaskDeletedPayload) {
@@ -191,13 +166,7 @@
       if (!res.ok) throw new Error('Failed to create task');
 
       const createdTask = await res.json();
-
-      users = users.map(u => {
-        if (u.id === member_id) {
-          return { ...u, tasks: [...u.tasks, createdTask] };
-        }
-        return u;
-      });
+      users = upsertTask(users, createdTask);
     } catch (e) {
       console.error('Error creating task:', e);
       alert('タスクの作成に失敗しました。');
@@ -239,16 +208,7 @@
       if (!res.ok) throw new Error('Failed to update task');
       
       const savedTask = await res.json();
-      
-      users = users.map(u => {
-        if (u.id === savedTask.member_id) {
-          return {
-            ...u,
-            tasks: u.tasks.map(t => t.id === savedTask.id ? savedTask : t)
-          };
-        }
-        return u;
-      });
+      users = upsertTask(users, savedTask);
       editingTask = null;
     } catch (e) {
       console.error('Error updating task:', e);
