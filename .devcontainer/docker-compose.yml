@@ -36,14 +36,30 @@ services:
       - dev-cargo:/home/vscode/.cargo
       - dev-rustup:/home/vscode/.rustup
       - dev-node:/home/vscode/.local/share/pnpm
-      - ai-cache:/home/vscode/.codex
+      - ai-cache-codex:/home/vscode/.codex
+      - ai-cache-gemini:/home/vscode/.gemini
     working_dir: /workspace
     environment:
       - RUST_BACKTRACE=1
     command: sleep infinity
 
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    container_name: task-app-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: task_app
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
 volumes:
   dev-cargo:
   dev-rustup:
   dev-node:
-  ai-cache:
+  ai-cache-codex:
+  ai-cache-gemini:
+  db-data:

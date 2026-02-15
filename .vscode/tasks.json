@@ -2,9 +2,9 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "AI: Open shell (ai container)",
+      "label": "gemini",
       "type": "shell",
-      "command": "docker exec -it -u vscode task-app-ai bash -c codex",
+      "command": "docker exec -it -u vscode task-app-ai bash -c gemini",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",

@@ -39,7 +39,7 @@ WORKDIR /workspace
 FROM base AS ai
 USER root
 # AI用の追加ツールをインストール (Codex)
-RUN npm i -g @openai/codex@latest
+RUN npm i -g @openai/codex@latest @google/gemini-cli
 
 USER ${USERNAME}
 WORKDIR /workspace
