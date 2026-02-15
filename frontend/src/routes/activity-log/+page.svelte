@@ -198,7 +198,6 @@
           {errorMessage}
         </div>
       {/if}
-
       {#if loading}
         <div class="text-center text-slate-400">読み込み中...</div>
       {:else if logs.length === 0}

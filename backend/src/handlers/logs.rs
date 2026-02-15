@@ -4,9 +4,9 @@ use axum::{
     response::IntoResponse,
     Extension, Json,
 };
+use sqlx::{Postgres, QueryBuilder};
 use crate::models::*;
 use crate::AppState;
-use sqlx::{Postgres, QueryBuilder};
 
 fn append_log_filters(
     query_builder: &mut QueryBuilder<Postgres>,
