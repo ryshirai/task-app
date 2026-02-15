@@ -3,9 +3,10 @@
   import TaskForm from '$lib/components/TaskForm.svelte';
   import TaskEditModal from '$lib/components/TaskEditModal.svelte';
   import UserManagementModal from '$lib/components/UserManagementModal.svelte';
+  import DisplayGroupModal from '$lib/components/DisplayGroupModal.svelte';
   import ProfileModal from '$lib/components/ProfileModal.svelte';
   import Login from '$lib/components/Login.svelte';
-  import { type User, type TaskTimeLog, type Notification as AppNotification, type PaginatedNotifications } from '$lib/types';
+  import { type User, type TaskTimeLog, type Notification as AppNotification, type PaginatedNotifications, type DisplayGroup } from '$lib/types';
   import { auth, logout } from '$lib/auth';
   import { toLocalISOString, getTodayJSTString, getJSTDateString, formatDateTime } from '$lib/utils';
   import { upsertTimeLog } from '$lib/taskUtils';
@@ -15,10 +16,13 @@
   import { page } from '$app/stores';
 
   let users: User[] = [];
+  let displayGroups: DisplayGroup[] = [];
+  let selectedGroupId: number | null = (browser ? Number(localStorage.getItem('glanceflow_selected_group')) : null) || null;
   let loading = true;
   let error: string | null = null;
   let editingTask: TaskTimeLog | null = null;
   let showUserManagement = false;
+  let showDisplayGroupSettings = false;
   let showProfile = false;
   let taskFormSelection: { member_id: number; start: Date; end: Date } | null = null;
   let pollInterval: ReturnType<typeof setInterval> | null = null;
@@ -36,6 +40,11 @@
   let userMenu: HTMLDivElement | null = null;
   let showNavDropdown = false;
   let showUserDropdown = false;
+
+  $: if (browser) {
+    if (selectedGroupId) localStorage.setItem('glanceflow_selected_group', selectedGroupId.toString());
+    else localStorage.removeItem('glanceflow_selected_group');
+  }
 
   $: if (browser && selectedDate) {
     localStorage.setItem('glanceflow_selected_date', selectedDate);
@@ -56,14 +65,18 @@
       (t.task_title || '').toLowerCase().includes(filterText.toLowerCase()) ||
       (t.task_tags || []).some(tag => tag.toLowerCase().includes(filterText.toLowerCase()))
     )
-  })).sort((a, b) => {
+  })).filter(u => {
+    if (!selectedGroupId) return true;
+    const group = displayGroups.find(g => g.id === selectedGroupId);
+    return group ? group.member_ids.includes(u.id) : true;
+  }).sort((a, b) => {
     if (a.id === $auth.user?.id) return -1;
     if (b.id === $auth.user?.id) return 1;
     return 0;
   });
 
   async function fetchUsers(silent = false) {
-    if (!$auth.token || editingTask || showUserManagement || showProfile) return;
+    if (!$auth.token || editingTask || showUserManagement || showProfile || showDisplayGroupSettings) return;
 
     try {
       const res = await fetch(`http://localhost:3000/api/users?date=${selectedDate}`, {
@@ -86,6 +99,20 @@
       }
     } finally {
       loading = false;
+    }
+  }
+
+  async function fetchDisplayGroups() {
+    if (!$auth.token) return;
+    try {
+      const res = await fetch('http://localhost:3000/api/display-groups', {
+        headers: { 'Authorization': `Bearer ${$auth.token}` }
+      });
+      if (res.ok) {
+        displayGroups = await res.json();
+      }
+    } catch (e) {
+      console.error('Failed to fetch display groups:', e);
     }
   }
 
@@ -206,6 +233,7 @@
     if ($auth.token) {
         fetchUsers();
         fetchNotifications();
+        fetchDisplayGroups();
         pollInterval = setInterval(() => fetchUsers(true), 30000);
         notificationPollInterval = setInterval(() => fetchNotifications(true), 30000);
     } else {
@@ -224,6 +252,7 @@
   $: if ($auth.token && !pollInterval) {
       fetchUsers();
       fetchNotifications();
+      fetchDisplayGroups();
       pollInterval = setInterval(() => fetchUsers(true), 30000);
       notificationPollInterval = setInterval(() => fetchNotifications(true), 30000);
   }
@@ -614,6 +643,37 @@
   </header>
 
   <main class="flex-1 min-h-0 flex flex-col p-1 overflow-hidden">
+    <!-- Sub Header: Group Selector -->
+    <div class="px-2 py-1.5 flex items-center gap-2 mb-1">
+      <div class="flex items-center bg-slate-100/80 p-1 rounded-xl border border-slate-200/60 shadow-sm">
+        <button 
+          on:click={() => selectedGroupId = null}
+          class="px-3 py-1 text-[10px] font-black uppercase tracking-tight rounded-lg transition-all {selectedGroupId === null ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}"
+        >
+          全員
+        </button>
+        {#each displayGroups as group}
+          <button 
+            on:click={() => selectedGroupId = group.id}
+            class="px-3 py-1 text-[10px] font-black uppercase tracking-tight rounded-lg transition-all {selectedGroupId === group.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}"
+          >
+            {group.name}
+          </button>
+        {/each}
+        <div class="w-px h-3 bg-slate-200 mx-1"></div>
+        <button 
+          on:click={() => showDisplayGroupSettings = true}
+          class="p-1 text-slate-400 hover:text-slate-600 hover:bg-white rounded-lg transition-all"
+          title="グループ設定を編集"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+      <div class="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-auto px-2">
+        {filteredUsers.length} members visible
+      </div>
+    </div>
+
     {#if loading}
       <div class="flex-1 flex items-center justify-center text-slate-400 font-bold animate-pulse">ダッシュボードを読み込み中...</div>
     {:else if error}
@@ -656,6 +716,15 @@
       on:close={() => showUserManagement = false}
       on:addMember={handleAddMember}
       on:deleteMember={handleDeleteMember}
+    />
+  {/if}
+
+  {#if showDisplayGroupSettings}
+    <DisplayGroupModal
+      members={users}
+      groups={displayGroups}
+      on:close={() => showDisplayGroupSettings = false}
+      on:groupsUpdated={(e) => displayGroups = e.detail}
     />
   {/if}
 

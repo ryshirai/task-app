@@ -1,5 +1,6 @@
 pub mod analytics;
 pub mod auth;
+pub mod groups;
 pub mod invitations;
 pub mod logs;
 pub mod notifications;

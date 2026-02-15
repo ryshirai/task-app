@@ -171,6 +171,14 @@ async fn main() {
             middleware::auth_middleware,
         ));
 
+    let display_group_routes = Router::new()
+        .route("/", get(handlers::groups::get_display_groups).post(handlers::groups::create_display_group))
+        .route("/{id}", axum::routing::patch(handlers::groups::update_display_group).delete(handlers::groups::delete_display_group))
+        .layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            middleware::auth_middleware,
+        ));
+
     let app = Router::new()
         .route(
             "/ws",
@@ -187,6 +195,7 @@ async fn main() {
         .nest("/api/logs", log_routes)
         .nest("/api/notifications", notification_routes)
         .nest("/api/analytics", analytics_routes)
+        .nest("/api/display-groups", display_group_routes)
         .layer(CorsLayer::permissive())
         .with_state(state);
 

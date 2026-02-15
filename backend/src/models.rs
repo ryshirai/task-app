@@ -29,6 +29,23 @@ pub struct Task {
 }
 
 #[derive(Serialize, Deserialize, sqlx::FromRow, Clone, Debug)]
+pub struct DisplayGroup {
+    pub id: i32,
+    pub organization_id: i32,
+    pub user_id: i32,
+    pub name: String,
+    #[sqlx(default)]
+    pub member_ids: Vec<i32>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateDisplayGroupInput {
+    pub name: String,
+    pub member_ids: Vec<i32>,
+}
+
+#[derive(Serialize, Deserialize, sqlx::FromRow, Clone, Debug)]
 pub struct TaskTimeLog {
     pub id: i32,
     pub organization_id: i32,
