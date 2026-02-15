@@ -5,7 +5,6 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
 };
-use sqlx::Postgres;
 
 pub async fn get_display_groups(
     State(state): State<AppState>,
