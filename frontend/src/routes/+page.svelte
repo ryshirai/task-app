@@ -5,7 +5,6 @@
   import UserManagementModal from '$lib/components/UserManagementModal.svelte';
   import ProfileModal from '$lib/components/ProfileModal.svelte';
   import Login from '$lib/components/Login.svelte';
-  import ActivityLogModal from '$lib/components/ActivityLogModal.svelte';
   import { TaskWebSocketClient } from '$lib/websocket';
   import { type User, type Task } from '$lib/types';
   import { auth, logout } from '$lib/auth';
@@ -20,7 +19,6 @@
   let editingTask: Task | null = null;
   let showUserManagement = false;
   let showProfile = false;
-  let showLogsModal = false;
   let taskFormSelection: { member_id: number; start: Date; end: Date } | null = null;
   let pollInterval: ReturnType<typeof setInterval> | null = null;
   let taskWebSocketClient: TaskWebSocketClient | null = null;
@@ -39,7 +37,7 @@
   }));
 
   async function fetchUsers(silent = false) {
-    if (!$auth.token || editingTask || showUserManagement || showProfile || showLogsModal) return;
+    if (!$auth.token || editingTask || showUserManagement || showProfile) return;
 
     try {
       const res = await fetch(`http://localhost:3000/api/users?date=${selectedDate}`, {
@@ -353,7 +351,7 @@
             日報を表示
         </button>
         <button 
-            on:click={() => showLogsModal = true}
+            on:click={() => goto('/activity-log')}
             class="p-1 text-slate-400 hover:text-slate-600 transition-colors"
             title="操作履歴"
             aria-label="操作履歴を開く"
@@ -432,12 +430,6 @@
   {#if showProfile}
     <ProfileModal
       on:close={() => showProfile = false}
-    />
-  {/if}
-
-  {#if showLogsModal}
-    <ActivityLogModal
-      on:close={() => showLogsModal = false}
     />
   {/if}
 </div>

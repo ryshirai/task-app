@@ -177,3 +177,17 @@ pub struct ReportQuery {
 pub struct GetUsersQuery {
     pub date: Option<NaiveDate>,
 }
+
+#[derive(Deserialize)]
+pub struct LogQuery {
+    pub page: Option<i64>,
+    pub per_page: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct PaginatedLogs {
+    pub items: Vec<ActivityLog>,
+    pub total: i64,
+    pub page: i64,
+    pub total_pages: i64,
+}
