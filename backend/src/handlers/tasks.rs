@@ -382,6 +382,45 @@ pub async fn delete_time_log(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn get_tasks(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(query): Query<GetTasksQuery>,
+) -> Result<Json<Vec<Task>>, (StatusCode, String)> {
+    let mut query_builder = QueryBuilder::<Postgres>::new(
+        "SELECT t.*, COALESCE(SUM(l.duration_minutes), 0)::BIGINT AS total_duration_minutes
+         FROM tasks t
+         LEFT JOIN task_time_logs l ON l.task_id = t.id
+         WHERE t.organization_id = "
+    );
+    query_builder.push_bind(claims.organization_id);
+
+    if let Some(member_id) = query.member_id {
+        query_builder.push(" AND t.member_id = ");
+        query_builder.push_bind(member_id);
+    }
+
+    if let Some(status) = query.status {
+        let statuses: Vec<String> = status
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .collect();
+        query_builder.push(" AND t.status = ANY(");
+        query_builder.push_bind(statuses);
+        query_builder.push(")");
+    }
+
+    query_builder.push(" GROUP BY t.id ORDER BY t.created_at DESC");
+
+    let tasks = query_builder
+        .build_query_as::<Task>()
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(tasks))
+}
+
 pub async fn create_task(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,

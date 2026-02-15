@@ -97,7 +97,7 @@ async fn main() {
         .route("/{token}", get(handlers::invitations::get_invitation));
 
     let task_routes = Router::new()
-        .route("/", post(handlers::tasks::create_task))
+        .route("/", get(handlers::tasks::get_tasks).post(handlers::tasks::create_task))
         .route("/time-logs", post(handlers::tasks::add_time_log))
         .route(
             "/time-logs/{id}",

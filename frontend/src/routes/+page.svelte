@@ -249,20 +249,19 @@
     }
   }
 
-  type CreateTaskPayload = { member_id: number; title: string; tags: string[]; start: Date; end: Date };
+  function handleOpenTaskForm(event: CustomEvent<{ member_id: number; start: Date; end: Date }>) {
+    taskFormSelection = event.detail;
+  }
 
-  async function createTask({ member_id, title, tags, start, end }: CreateTaskPayload) {
-    const existingTaskTimeLog = users
-      .find((user) => user.id === member_id)
-      ?.time_logs?.find(
-        (timeLog) => (timeLog.task_title || '').trim().toLowerCase() === title.trim().toLowerCase()
-      );
+  async function handleTaskFormSubmit(event: CustomEvent<{ title: string; tags: string[]; task_id?: number; start: Date; end: Date }>) {
+    if (!taskFormSelection) return;
+    const { title, tags, task_id, start, end } = event.detail;
 
     const newTaskData = {
-      user_id: member_id,
-      task_id: existingTaskTimeLog?.task_id ?? null,
-      title: existingTaskTimeLog ? null : title,
-      tags: existingTaskTimeLog ? null : tags,
+      user_id: taskFormSelection.member_id,
+      task_id: task_id || null,
+      title: task_id ? null : title,
+      tags: task_id ? null : tags,
       start_at: toLocalISOString(start),
       end_at: toLocalISOString(end)
     };
@@ -279,9 +278,9 @@
 
       if (!res.ok) throw new Error('Failed to create time log');
 
-      const createdTask = await res.json();
-      if (getJSTDateString(new Date(createdTask.start_at)) === selectedDate) {
-        users = upsertTimeLog(users, createdTask);
+      const savedTask = await res.json();
+      if (getJSTDateString(new Date(savedTask.start_at)) === selectedDate) {
+        users = upsertTimeLog(users, savedTask);
       }
     } catch (e) {
       console.error('Error creating task:', e);
@@ -289,18 +288,6 @@
     } finally {
       taskFormSelection = null;
     }
-  }
-
-  function handleOpenTaskForm(event: CustomEvent<{ member_id: number; start: Date; end: Date }>) {
-    taskFormSelection = event.detail;
-  }
-
-  async function handleTaskFormSubmit(event: CustomEvent<{ title: string; tags: string[]; start: Date; end: Date }>) {
-    if (!taskFormSelection) return;
-    await createTask({
-      member_id: taskFormSelection.member_id,
-      ...event.detail
-    });
   }
 
   async function handleUpdateTask(event: CustomEvent<TaskTimeLog>) {
@@ -598,6 +585,7 @@
     <TaskForm
       start={taskFormSelection.start}
       end={taskFormSelection.end}
+      member_id={taskFormSelection.member_id}
       existingTasks={users.find(u => u.id === taskFormSelection?.member_id)?.time_logs?.map(l => l.task_title).filter((v, i, a) => v && a.indexOf(v) === i) || []}
       on:submit={handleTaskFormSubmit}
       on:cancel={() => taskFormSelection = null}

@@ -254,6 +254,12 @@ pub struct PaginatedLogs {
     pub total_pages: i64,
 }
 
+#[derive(Deserialize)]
+pub struct GetTasksQuery {
+    pub member_id: Option<i32>,
+    pub status: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, sqlx::FromRow)]
 pub struct Notification {
     pub id: i32,
