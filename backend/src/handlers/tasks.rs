@@ -6,6 +6,8 @@ use axum::{
 use crate::models::*;
 use crate::AppState;
 use crate::handlers::log_activity;
+use crate::WsMessage;
+use serde_json::json;
 
 pub async fn create_task(
     State(state): State<AppState>,
@@ -34,6 +36,12 @@ pub async fn create_task(
         Some(task.id),
         Some(format!("Title: {}", task.title)),
     ).await;
+
+    let _ = state.tx.send(WsMessage {
+        organization_id: task.organization_id,
+        event: "task_created".to_string(),
+        payload: json!(task),
+    });
 
     Ok((StatusCode::CREATED, Json(task)))
 }
@@ -76,6 +84,12 @@ pub async fn update_task(
         Some(format!("Status: {}, Progress: {}%", task.status, task.progress_rate)),
     ).await;
 
+    let _ = state.tx.send(WsMessage {
+        organization_id: task.organization_id,
+        event: "task_updated".to_string(),
+        payload: json!(task),
+    });
+
     Ok(Json(task))
 }
 
@@ -100,6 +114,12 @@ pub async fn delete_task(
         Some(id),
         None,
     ).await;
+
+    let _ = state.tx.send(WsMessage {
+        organization_id: claims.organization_id,
+        event: "task_deleted".to_string(),
+        payload: json!({ "id": id }),
+    });
 
     Ok(StatusCode::NO_CONTENT)
 }

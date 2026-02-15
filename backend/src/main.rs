@@ -14,10 +14,20 @@ use sqlx::{Pool, Postgres};
 use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
 
+use tokio::sync::broadcast;
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct WsMessage {
+    pub organization_id: i32,
+    pub event: String,
+    pub payload: serde_json::Value,
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub pool: Pool<Postgres>,
     pub jwt_secret: String,
+    pub tx: broadcast::Sender<WsMessage>,
 }
 
 #[tokio::main]
@@ -41,7 +51,9 @@ async fn main() {
 
     db::seed_data(&pool).await.expect("Failed to seed data");
 
-    let state = AppState { pool, jwt_secret };
+    let (tx, _rx) = broadcast::channel(100);
+
+    let state = AppState { pool, jwt_secret, tx };
 
     let auth_routes = Router::new()
         .route("/login", post(handlers::auth::login))
@@ -76,6 +88,7 @@ async fn main() {
         .layer(axum_middleware::from_fn_with_state(state.clone(), middleware::auth_middleware));
 
     let app = Router::new()
+        .route("/ws", get(handlers::ws::ws_handler).layer(axum_middleware::from_fn_with_state(state.clone(), middleware::auth_middleware)))
         .nest("/api/auth", auth_routes)
         .nest("/api/users", user_routes)
         .nest("/api/invitations", invitation_routes)

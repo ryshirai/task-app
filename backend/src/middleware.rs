@@ -16,11 +16,23 @@ pub async fn auth_middleware(
     let auth_header = req.headers()
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
-        .and_then(|h| h.strip_prefix("Bearer "))
-        .ok_or((StatusCode::UNAUTHORIZED, "Missing authorization header".to_string()))?;
+        .and_then(|h| h.strip_prefix("Bearer "));
+
+    let query_token = req.uri()
+        .query()
+        .and_then(|query| {
+            query
+                .split('&')
+                .filter_map(|pair| pair.split_once('='))
+                .find_map(|(key, value)| (key == "token" && !value.is_empty()).then_some(value))
+        });
+
+    let token = auth_header
+        .or(query_token)
+        .ok_or((StatusCode::UNAUTHORIZED, "Missing authorization token".to_string()))?;
 
     let token_data = decode::<Claims>(
-        auth_header,
+        token,
         &DecodingKey::from_secret(state.jwt_secret.as_ref()),
         &Validation::new(Algorithm::HS256),
     ).map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;
