@@ -123,6 +123,15 @@ export interface ReportStats {
     total_submitted: number;
 }
 
+export interface DisplayGroup {
+    id: number;
+    organization_id: number;
+    user_id: number;
+    name: string;
+    member_ids: number[];
+    created_at: string;
+}
+
 export interface PersonalAnalyticsResponse {
     user_name: string;
     task_stats: TaskStats;
