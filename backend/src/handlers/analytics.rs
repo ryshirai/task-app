@@ -2,9 +2,10 @@ use crate::AppState;
 use crate::models::*;
 use axum::{
     Extension, Json,
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
 };
+use sqlx::{Pool, Postgres};
 
 #[derive(sqlx::FromRow)]
 struct TaskCompletionStats {
@@ -13,10 +14,21 @@ struct TaskCompletionStats {
     completed_last_week: i64,
 }
 
-pub async fn get_personal_analytics(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-) -> Result<Json<AnalyticsResponse>, (StatusCode, String)> {
+async fn fetch_user_analytics(
+    pool: &Pool<Postgres>,
+    org_id: i32,
+    user_id: i32,
+) -> Result<AnalyticsResponse, (StatusCode, String)> {
+    let user_name = sqlx::query_scalar::<_, String>(
+        "SELECT name FROM users WHERE organization_id = $1 AND id = $2",
+    )
+    .bind(org_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "User not found".to_string()))?;
+
     let task_completion = sqlx::query_as::<_, TaskCompletionStats>(
         "SELECT
             COUNT(*) FILTER (WHERE status = 'done') AS total_completed,
@@ -33,9 +45,9 @@ pub async fn get_personal_analytics(
          FROM tasks
          WHERE organization_id = $1 AND member_id = $2",
     )
-    .bind(claims.organization_id)
-    .bind(claims.user_id)
-    .fetch_one(&state.pool)
+    .bind(org_id)
+    .bind(user_id)
+    .fetch_one(pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
@@ -46,9 +58,9 @@ pub async fn get_personal_analytics(
          GROUP BY status
          ORDER BY count DESC, status ASC",
     )
-    .bind(claims.organization_id)
-    .bind(claims.user_id)
-    .fetch_all(&state.pool)
+    .bind(org_id)
+    .bind(user_id)
+    .fetch_all(pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
@@ -57,9 +69,9 @@ pub async fn get_personal_analytics(
          FROM daily_reports
          WHERE organization_id = $1 AND user_id = $2",
     )
-    .bind(claims.organization_id)
-    .bind(claims.user_id)
-    .fetch_one(&state.pool)
+    .bind(org_id)
+    .bind(user_id)
+    .fetch_one(pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
@@ -79,13 +91,14 @@ pub async fn get_personal_analytics(
          GROUP BY gs.day
          ORDER BY gs.day",
     )
-    .bind(claims.organization_id)
-    .bind(claims.user_id)
-    .fetch_all(&state.pool)
+    .bind(org_id)
+    .bind(user_id)
+    .fetch_all(pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    Ok(Json(AnalyticsResponse {
+    Ok(AnalyticsResponse {
+        user_name,
         task_stats: TaskStats {
             total_completed: task_completion.total_completed,
             completed_this_week: task_completion.completed_this_week,
@@ -96,5 +109,26 @@ pub async fn get_personal_analytics(
             total_submitted: total_reports,
         },
         heatmap,
-    }))
+    })
+}
+
+pub async fn get_personal_analytics(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<AnalyticsResponse>, (StatusCode, String)> {
+    let analytics = fetch_user_analytics(&state.pool, claims.organization_id, claims.user_id).await?;
+    Ok(Json(analytics))
+}
+
+pub async fn get_user_analytics(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(id): Path<i32>,
+) -> Result<Json<AnalyticsResponse>, (StatusCode, String)> {
+    if claims.role != "admin" && claims.user_id != id {
+        return Err((StatusCode::FORBIDDEN, "Forbidden".to_string()));
+    }
+
+    let analytics = fetch_user_analytics(&state.pool, claims.organization_id, id).await?;
+    Ok(Json(analytics))
 }

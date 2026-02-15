@@ -103,6 +103,7 @@ export interface ReportStats {
 }
 
 export interface PersonalAnalyticsResponse {
+    user_name: string;
     task_stats: TaskStats;
     report_stats: ReportStats;
     heatmap: HeatmapDay[];

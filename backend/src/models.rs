@@ -228,6 +228,7 @@ pub struct PaginatedNotifications {
 
 #[derive(Serialize, Deserialize)]
 pub struct AnalyticsResponse {
+    pub user_name: String,
     pub task_stats: TaskStats,
     pub report_stats: ReportStats,
     pub heatmap: Vec<HeatmapDay>,

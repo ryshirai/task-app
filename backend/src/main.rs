@@ -146,6 +146,7 @@ async fn main() {
 
     let analytics_routes = Router::new()
         .route("/personal", get(handlers::analytics::get_personal_analytics))
+        .route("/users/{id}", get(handlers::analytics::get_user_analytics))
         .layer(axum_middleware::from_fn_with_state(
             state.clone(),
             middleware::auth_middleware,

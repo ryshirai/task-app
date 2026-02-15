@@ -608,6 +608,7 @@
       <TimelineContainer 
         members={filteredUsers} 
         {baseDate}
+        isAdmin={$auth.user?.role === 'admin'}
         on:openTaskForm={handleOpenTaskForm}
         on:editTask={(e) => editingTask = e.detail}
         on:updateTask={(e) => handleUpdateTask(e)}

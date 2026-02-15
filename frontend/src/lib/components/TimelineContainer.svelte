@@ -5,6 +5,7 @@
   
   export let members: User[];
   export let baseDate: Date;
+  export let isAdmin = false;
 
   // Define hours for header (9:00 to 18:00)
   const hours = Array.from({ length: 10 }, (_, i) => 9 + i);
@@ -39,6 +40,7 @@
         <MemberRow 
           {member} 
           {baseDate}
+          {isAdmin}
           on:openTaskForm
           on:editTask 
           on:updateTask
