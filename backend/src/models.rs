@@ -182,6 +182,9 @@ pub struct GetUsersQuery {
 pub struct LogQuery {
     pub page: Option<i64>,
     pub per_page: Option<i64>,
+    pub user_id: Option<i32>,
+    pub start_date: Option<NaiveDate>,
+    pub end_date: Option<NaiveDate>,
 }
 
 #[derive(Serialize)]

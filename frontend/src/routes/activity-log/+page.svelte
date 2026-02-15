@@ -2,17 +2,26 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { auth } from '$lib/auth';
-  import type { ActivityLog } from '$lib/types';
+  import type { ActivityLog, User } from '$lib/types';
 
   let logs: ActivityLog[] = [];
+  let users: User[] = [];
   let loading = true;
   let currentPage = 1;
   let totalPages = 1;
+  let selectedUserId = '';
+  let startDate = '';
+  let endDate = '';
 
   async function fetchLogs(page: number) {
     loading = true;
     try {
-      const res = await fetch(`http://localhost:3000/api/logs?page=${page}`, {
+      const params = new URLSearchParams({ page: String(page) });
+      if (selectedUserId) params.set('user_id', selectedUserId);
+      if (startDate) params.set('start_date', startDate);
+      if (endDate) params.set('end_date', endDate);
+
+      const res = await fetch(`http://localhost:3000/api/logs?${params.toString()}`, {
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch logs');
@@ -26,6 +35,23 @@
     }
   }
 
+  async function fetchUsers() {
+    try {
+      const res = await fetch('http://localhost:3000/api/users', {
+        headers: { 'Authorization': `Bearer ${$auth.token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch users');
+      users = await res.json();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function applyFilters() {
+    currentPage = 1;
+    await fetchLogs(currentPage);
+  }
+
   async function changePage(page: number) {
     if (page < 1 || page > totalPages || page === currentPage) return;
     currentPage = page;
@@ -37,6 +63,7 @@
       goto('/');
       return;
     }
+    await fetchUsers();
     await fetchLogs(currentPage);
   });
 
@@ -68,6 +95,38 @@
 
   <main class="max-w-4xl w-full mx-auto p-4 md:p-6 flex-1">
     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-5">
+      <div class="mb-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+        <select
+          bind:value={selectedUserId}
+          class="px-3 py-2 rounded border border-slate-300 text-sm text-slate-700 bg-white"
+        >
+          <option value="">すべてのユーザー</option>
+          {#each users as user}
+            <option value={String(user.id)}>{user.name}</option>
+          {/each}
+        </select>
+
+        <input
+          type="date"
+          bind:value={startDate}
+          class="px-3 py-2 rounded border border-slate-300 text-sm text-slate-700"
+        />
+
+        <input
+          type="date"
+          bind:value={endDate}
+          class="px-3 py-2 rounded border border-slate-300 text-sm text-slate-700"
+        />
+
+        <button
+          class="px-3 py-2 rounded border border-slate-300 text-sm text-slate-700 font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          on:click={applyFilters}
+          disabled={loading}
+        >
+          Filter
+        </button>
+      </div>
+
       {#if loading}
         <div class="text-center text-slate-400">読み込み中...</div>
       {:else if logs.length === 0}
