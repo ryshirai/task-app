@@ -23,7 +23,7 @@
   let taskFormSelection: { member_id: number; start: Date; end: Date } | null = null;
   let pollInterval: ReturnType<typeof setInterval> | null = null;
   let filterText = '';
-  let selectedDate = getTodayJSTString();
+  let selectedDate = (browser ? localStorage.getItem('glanceflow_selected_date') : null) || getTodayJSTString();
   let observedTaskIdParam: string | null = null;
   let deepLinkHandled = false;
   let notifications: AppNotification[] = [];
@@ -36,6 +36,10 @@
   let userMenu: HTMLDivElement | null = null;
   let showNavDropdown = false;
   let showUserDropdown = false;
+
+  $: if (browser && selectedDate) {
+    localStorage.setItem('glanceflow_selected_date', selectedDate);
+  }
 
   $: baseDate = new Date(selectedDate + 'T00:00:00+09:00');
   $: taskIdParam = $page.url.searchParams.get('task_id');
@@ -52,7 +56,11 @@
       (t.task_title || '').toLowerCase().includes(filterText.toLowerCase()) ||
       (t.task_tags || []).some(tag => tag.toLowerCase().includes(filterText.toLowerCase()))
     )
-  }));
+  })).sort((a, b) => {
+    if (a.id === $auth.user?.id) return -1;
+    if (b.id === $auth.user?.id) return 1;
+    return 0;
+  });
 
   async function fetchUsers(silent = false) {
     if (!$auth.token || editingTask || showUserManagement || showProfile) return;
