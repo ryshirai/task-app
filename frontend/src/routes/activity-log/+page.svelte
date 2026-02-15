@@ -2,25 +2,56 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { auth } from '$lib/auth';
-  import type { ActivityLog } from '$lib/types';
+  import type { ActivityLog, User } from '$lib/types';
 
   let logs: ActivityLog[] = [];
+  let users: User[] = [];
   let loading = true;
+  let exporting = false;
+  let errorMessage = '';
   let currentPage = 1;
   let totalPages = 1;
+  let filterUserId = '';
+  let filterStartDate = '';
+  let filterEndDate = '';
 
-  async function fetchLogs(page: number) {
-    loading = true;
+  function buildQueryParams(includePagination: boolean): URLSearchParams {
+    const params = new URLSearchParams();
+    if (includePagination) params.set('page', String(currentPage));
+    if (filterUserId) params.set('user_id', filterUserId);
+    if (filterStartDate) params.set('start_date', filterStartDate);
+    if (filterEndDate) params.set('end_date', filterEndDate);
+    return params;
+  }
+
+  async function fetchUsers() {
     try {
-      const res = await fetch(`http://localhost:3000/api/logs?page=${page}`, {
-        headers: { 'Authorization': `Bearer ${$auth.token}` }
+      const res = await fetch('http://localhost:3000/api/users', {
+        headers: { Authorization: `Bearer ${$auth.token}` }
       });
-      if (!res.ok) throw new Error('Failed to fetch logs');
+      if (!res.ok) throw new Error(`Failed to fetch users (${res.status})`);
+      users = await res.json();
+    } catch (e) {
+      console.error(e);
+      errorMessage = e instanceof Error ? e.message : 'Failed to fetch users';
+    }
+  }
+
+  async function fetchLogs() {
+    loading = true;
+    errorMessage = '';
+    try {
+      const params = buildQueryParams(true);
+      const res = await fetch(`http://localhost:3000/api/logs?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${$auth.token}` }
+      });
+      if (!res.ok) throw new Error(`Failed to fetch logs (${res.status})`);
       const data = await res.json();
       logs = data.items;
       totalPages = data.total_pages;
     } catch (e) {
       console.error(e);
+      errorMessage = e instanceof Error ? e.message : 'Failed to fetch logs';
     } finally {
       loading = false;
     }
@@ -29,7 +60,53 @@
   async function changePage(page: number) {
     if (page < 1 || page > totalPages || page === currentPage) return;
     currentPage = page;
-    await fetchLogs(currentPage);
+    await fetchLogs();
+  }
+
+  async function applyFilters() {
+    currentPage = 1;
+    await fetchLogs();
+  }
+
+  async function exportCsv() {
+    if (!$auth.token) {
+      errorMessage = 'Authentication required';
+      return;
+    }
+
+    exporting = true;
+    errorMessage = '';
+    try {
+      const params = buildQueryParams(false);
+      const url = `http://localhost:3000/api/logs/export?${params.toString()}`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${$auth.token}` }
+      });
+
+      if (!res.ok) {
+        const message = await res.text();
+        throw new Error(message || `Failed to export CSV (${res.status})`);
+      }
+
+      const blob = await res.blob();
+      const contentDisposition = res.headers.get('content-disposition') ?? '';
+      const filenameMatch = /filename="?([^"]+)"?/.exec(contentDisposition);
+      const filename = filenameMatch?.[1] || 'activity_logs.csv';
+
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (e) {
+      console.error(e);
+      errorMessage = e instanceof Error ? e.message : 'Failed to export CSV';
+    } finally {
+      exporting = false;
+    }
   }
 
   onMount(async () => {
@@ -37,7 +114,7 @@
       goto('/');
       return;
     }
-    await fetchLogs(currentPage);
+    await Promise.all([fetchUsers(), fetchLogs()]);
   });
 
   function formatAction(action: string) {
@@ -68,6 +145,60 @@
 
   <main class="max-w-4xl w-full mx-auto p-4 md:p-6 flex-1">
     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-5">
+      <div class="mb-4 flex flex-wrap items-end gap-3 border-b border-slate-100 pb-4">
+        <div class="min-w-[160px]">
+          <label for="filter-user-id" class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">User</label>
+          <select
+            id="filter-user-id"
+            bind:value={filterUserId}
+            class="w-full rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-700"
+          >
+            <option value="">All</option>
+            {#each users as user}
+              <option value={user.id}>{user.name}</option>
+            {/each}
+          </select>
+        </div>
+        <div>
+          <label for="filter-start-date" class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Start Date</label>
+          <input
+            id="filter-start-date"
+            type="date"
+            bind:value={filterStartDate}
+            class="rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-700"
+          />
+        </div>
+        <div>
+          <label for="filter-end-date" class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">End Date</label>
+          <input
+            id="filter-end-date"
+            type="date"
+            bind:value={filterEndDate}
+            class="rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-700"
+          />
+        </div>
+        <button
+          class="rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
+          on:click={applyFilters}
+          disabled={loading || exporting}
+        >
+          Filter
+        </button>
+        <button
+          class="rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          on:click={exportCsv}
+          disabled={loading || exporting}
+        >
+          {exporting ? 'Exporting...' : 'Export CSV'}
+        </button>
+      </div>
+
+      {#if errorMessage}
+        <div class="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {errorMessage}
+        </div>
+      {/if}
+
       {#if loading}
         <div class="text-center text-slate-400">読み込み中...</div>
       {:else if logs.length === 0}
