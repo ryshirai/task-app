@@ -73,7 +73,7 @@
         {:else}
             <h1 class="text-2xl font-bold text-slate-800 mb-1 text-center">GlanceFlow</h1>
             <p class="text-slate-500 text-xs text-center mb-4">
-                <span class="font-bold text-blue-600">{invitation?.org_name}</span> への招待
+                <span class="font-bold text-blue-600">{invitation?.org_name ?? '組織'}</span> への招待
             </p>
             <p class="text-slate-400 text-[10px] text-center mb-6 uppercase tracking-widest font-bold">アカウントを作成して参加しましょう</p>
             

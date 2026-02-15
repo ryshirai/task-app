@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { type Task } from '$lib/types';
-  import { getTaskPosition, percentageToDate, snapTo15Min } from '$lib/utils';
+  import { getTaskPosition, percentageToDate, snapTo15Min, toLocalISOString } from '$lib/utils';
   
   export let task: Task;
   export let baseDate: Date;
@@ -142,8 +142,8 @@
 
     dispatch('update', {
       ...task,
-      start_at: newStart.toISOString(),
-      end_at: newEnd.toISOString()
+      start_at: toLocalISOString(newStart),
+      end_at: toLocalISOString(newEnd)
     });
   }
 </script>
