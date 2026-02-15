@@ -1,4 +1,3 @@
-mod db;
 mod handlers;
 mod middleware;
 mod models;
@@ -48,8 +47,6 @@ async fn main() {
         .run(&pool)
         .await
         .expect("Failed to run migrations");
-
-    db::seed_data(&pool).await.expect("Failed to seed data");
 
     let (tx, _rx) = broadcast::channel(100);
 

@@ -44,7 +44,7 @@
         <form on:submit|preventDefault={handleRegister} class="space-y-4">
             <div>
                 <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">組織名</label>
-                <input bind:value={organization_name} required class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="株式会社サンプル" />
+                <input bind:value={organization_name} required class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-50 text-sm" placeholder="組織名を入力してください" />
             </div>
             
             <div class="pt-4 border-t border-slate-100">

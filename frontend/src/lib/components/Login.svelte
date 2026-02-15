@@ -49,7 +49,7 @@
                     bind:value={username}
                     required
                     class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
-                    placeholder="admin"
+                    placeholder="ユーザー名"
                 />
             </div>
             
@@ -81,10 +81,6 @@
         <div class="mt-6 flex flex-col gap-3 text-center">
             <a href="/register" class="text-xs text-blue-600 font-bold hover:underline">新しい組織を作成する</a>
             <a href="/forgot-password" class="text-xs text-slate-400 hover:text-slate-600">パスワードを忘れた場合</a>
-        </div>
-
-        <div class="mt-6 text-center text-[10px] text-slate-300">
-            デモ用: admin / admin123
         </div>
     </div>
 </div>
