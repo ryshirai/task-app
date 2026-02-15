@@ -5,8 +5,6 @@
   import UserManagementModal from '$lib/components/UserManagementModal.svelte';
   import ProfileModal from '$lib/components/ProfileModal.svelte';
   import Login from '$lib/components/Login.svelte';
-  import DailyReportModal from '$lib/components/DailyReportModal.svelte';
-  import ReportListModal from '$lib/components/ReportListModal.svelte';
   import ActivityLogModal from '$lib/components/ActivityLogModal.svelte';
   import { TaskWebSocketClient } from '$lib/websocket';
   import { type User, type Task } from '$lib/types';
@@ -14,6 +12,7 @@
   import { toLocalISOString } from '$lib/utils';
   import { upsertTask } from '$lib/taskUtils';
   import { onMount, onDestroy } from 'svelte';
+  import { goto } from '$app/navigation';
 
   let users: User[] = [];
   let loading = true;
@@ -21,8 +20,6 @@
   let editingTask: Task | null = null;
   let showUserManagement = false;
   let showProfile = false;
-  let showReportModal = false;
-  let showReportsModal = false;
   let showLogsModal = false;
   let taskFormSelection: { member_id: number; start: Date; end: Date } | null = null;
   let pollInterval: ReturnType<typeof setInterval> | null = null;
@@ -42,7 +39,7 @@
   }));
 
   async function fetchUsers(silent = false) {
-    if (!$auth.token || editingTask || showUserManagement || showProfile || showReportModal || showReportsModal || showLogsModal) return;
+    if (!$auth.token || editingTask || showUserManagement || showProfile || showLogsModal) return;
 
     try {
       const res = await fetch(`http://localhost:3000/api/users?date=${selectedDate}`, {
@@ -350,7 +347,7 @@
       
       <div class="flex items-center gap-1.5 border-l border-slate-200 pl-3">
         <button 
-            on:click={() => showReportsModal = true}
+            on:click={() => goto('/reports')}
             class="px-2.5 py-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-all text-[10px] font-bold border border-transparent hover:border-slate-200"
         >
             日報を表示
@@ -364,7 +361,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"></path><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"></path></svg>
         </button>
         <button 
-            on:click={() => showReportModal = true}
+            on:click={() => goto('/reports/new')}
             class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-all text-[10px] font-bold shadow-sm"
         >
             日報提出
@@ -435,20 +432,6 @@
   {#if showProfile}
     <ProfileModal
       on:close={() => showProfile = false}
-    />
-  {/if}
-
-  {#if showReportModal}
-    <DailyReportModal
-      userTasks={getMyTasks()}
-      on:close={() => showReportModal = false}
-    />
-  {/if}
-
-  {#if showReportsModal}
-    <ReportListModal
-      {users}
-      on:close={() => showReportsModal = false}
     />
   {/if}
 

@@ -80,7 +80,7 @@ async fn main() {
 
     let report_routes = Router::new()
         .route("/", get(handlers::reports::get_reports).post(handlers::reports::create_report))
-        .route("/{id}", axum::routing::patch(handlers::reports::update_report))
+        .route("/{id}", get(handlers::reports::get_report).patch(handlers::reports::update_report))
         .layer(axum_middleware::from_fn_with_state(state.clone(), middleware::auth_middleware));
 
     let log_routes = Router::new()
