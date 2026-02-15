@@ -18,9 +18,9 @@
   }
 
   // Workload calculation
-  $: activeTasks = member.tasks.filter(t => t.status !== 'done');
-  $: hasOverlap = activeTasks.some((t1, i) => 
-    activeTasks.some((t2, j) => 
+  $: activeTimeLogs = (member.time_logs || []).filter((timeLog) => timeLog.task_status !== 'done');
+  $: hasOverlap = activeTimeLogs.some((t1, i) => 
+    activeTimeLogs.some((t2, j) => 
       i !== j && 
       new Date(t1.start_at) < new Date(t2.end_at) && 
       new Date(t2.start_at) < new Date(t1.end_at)
@@ -31,8 +31,8 @@
   
   $: loadLevel = (() => {
     if (hasOverlap) return 'overload';
-    if (activeTasks.length >= 3) return 'high';
-    if (activeTasks.length >= 1) return 'moderate';
+    if (activeTimeLogs.length >= 3) return 'high';
+    if (activeTimeLogs.length >= 1) return 'moderate';
     return 'low';
   })() as LoadLevel;
 
@@ -71,8 +71,8 @@
             <span class="px-1 py-0.5 rounded-[3px] text-[7px] font-black uppercase border {loadConfig[loadLevel].color} transition-all duration-300">
                 {loadConfig[loadLevel].label}
             </span>
-            {#if activeTasks.length > 0}
-                <span class="text-[8px] text-slate-400 font-bold">{activeTasks.length}件</span>
+            {#if activeTimeLogs.length > 0}
+                <span class="text-[8px] text-slate-400 font-bold">{activeTimeLogs.length}件</span>
             {/if}
         </div>
     </div>
@@ -84,7 +84,7 @@
       <div class="absolute top-0 bottom-0 border-l border-slate-200" style="left: {i * (100 / 9)}%;"></div>
     {/each}
 
-    {#each member.tasks as task (task.id)}
+    {#each member.time_logs || [] as task (task.id)}
       <TaskBar 
         {task} 
         {baseDate}

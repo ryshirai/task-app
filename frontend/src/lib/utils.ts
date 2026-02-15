@@ -1,27 +1,63 @@
 // src/lib/utils.ts
-import { type Task } from './types';
+import { type Task, type TaskTimeLog } from './types';
 
 export const START_HOUR = 9;
 export const END_HOUR = 18;
 export const TOTAL_MINUTES = (END_HOUR - START_HOUR) * 60; // 540 minutes
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+export const jstTimeFormatter = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+});
+
+export const jstDateFormatter = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Tokyo'
+});
 
 export function formatTime(date: Date): string {
-    return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return jstTimeFormatter.format(date);
+}
+
+export function formatDateTime(date: Date): string {
+    return new Intl.DateTimeFormat('ja-JP', {
+        timeZone: 'Asia/Tokyo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    }).format(date);
+}
+
+export function getJSTDateString(date: Date): string {
+    return jstDateFormatter.format(date);
+}
+
+export function getTodayJSTString(): string {
+    return getJSTDateString(new Date());
+}
+
+export function isSameJSTDate(d1: Date, d2: Date): boolean {
+    return getJSTDateString(d1) === getJSTDateString(d2);
 }
 
 export function getPercentage(date: Date): number {
-    const startOfDay = new Date(date);
-    startOfDay.setHours(START_HOUR, 0, 0, 0);
+    // Total minutes since JST midnight
+    const minutesInDay = Math.floor(((date.getTime() + JST_OFFSET_MS) % (24 * 60 * 60 * 1000)) / (60 * 1000));
+    const minutesSince9AM = minutesInDay - (START_HOUR * 60);
 
-    const diffMs = date.getTime() - startOfDay.getTime();
-    const diffMinutes = diffMs / (1000 * 60);
-
-    return (diffMinutes / TOTAL_MINUTES) * 100;
+    return (minutesSince9AM / TOTAL_MINUTES) * 100;
 }
 
-export function getTaskPosition(task: Task): { left: number; width: number } {
-    const start = new Date(task.start_at);
-    const end = new Date(task.end_at);
+type TimeRange = Pick<Task, 'start_at' | 'end_at'> | Pick<TaskTimeLog, 'start_at' | 'end_at'>;
+
+export function getTaskPosition(item: TimeRange): { left: number; width: number } {
+    const start = new Date(item.start_at);
+    const end = new Date(item.end_at);
 
     const startPercent = getPercentage(start);
     const endPercent = getPercentage(end);
@@ -33,49 +69,41 @@ export function getTaskPosition(task: Task): { left: number; width: number } {
     return { left, width };
 }
 
-export function isTaskActive(task: Task, now: Date): boolean {
-    const start = new Date(task.start_at);
-    const end = new Date(task.end_at);
+export function isTaskActive(item: TimeRange, now: Date): boolean {
+    const start = new Date(item.start_at);
+    const end = new Date(item.end_at);
     return now >= start && now <= end;
 }
 
 export function xToTime(x: number, width: number, baseDate: Date): Date {
-    const minutes = (x / width) * TOTAL_MINUTES;
-    const date = new Date(baseDate);
-    date.setHours(START_HOUR, 0, 0, 0);
-    date.setMinutes(date.getMinutes() + minutes);
+    // baseDate should be 00:00 JST of the selected day
+    const minutesSince9AM = (x / width) * TOTAL_MINUTES;
+    const totalMinutesSinceMidnightJST = (START_HOUR * 60) + minutesSince9AM;
+    
+    const date = new Date(baseDate.getTime());
+    date.setUTCMinutes(date.getUTCMinutes() + totalMinutesSinceMidnightJST);
     return date;
 }
 
 export function percentageToDate(percent: number, baseDate: Date): Date {
-    const minutes = (percent / 100) * TOTAL_MINUTES;
-    const date = new Date(baseDate);
-    date.setHours(START_HOUR, 0, 0, 0);
-    date.setMinutes(date.getMinutes() + minutes);
+    const minutesSince9AM = (percent / 100) * TOTAL_MINUTES;
+    const totalMinutesSinceMidnightJST = (START_HOUR * 60) + minutesSince9AM;
+    
+    const date = new Date(baseDate.getTime());
+    date.setUTCMinutes(date.getUTCMinutes() + totalMinutesSinceMidnightJST);
     return date;
 }
 
 export function snapTo15Min(date: Date): Date {
-    const minutes = date.getMinutes();
-    const snappedMinutes = Math.round(minutes / 15) * 15;
-    const snappedDate = new Date(date);
-    snappedDate.setMinutes(snappedMinutes, 0, 0);
-    return snappedDate;
+    const minutesInDay = Math.floor(((date.getTime() + JST_OFFSET_MS) % (24 * 60 * 60 * 1000)) / (60 * 1000));
+    const snappedMinutesInDay = Math.round(minutesInDay / 15) * 15;
+    
+    const baseOfDayJST = date.getTime() + JST_OFFSET_MS - ((date.getTime() + JST_OFFSET_MS) % (24 * 60 * 60 * 1000));
+    return new Date(baseOfDayJST - JST_OFFSET_MS + (snappedMinutesInDay * 60 * 1000));
 }
 
 export function toLocalISOString(date: Date): string {
-    const tzo = -date.getTimezoneOffset();
-    const dif = tzo >= 0 ? '+' : '-';
-    const pad = (num: number) => String(num).padStart(2, '0');
-    const padMs = (num: number) => String(num).padStart(3, '0');
-
-    return date.getFullYear() +
-        '-' + pad(date.getMonth() + 1) +
-        '-' + pad(date.getDate()) +
-        'T' + pad(date.getHours()) +
-        ':' + pad(date.getMinutes()) +
-        ':' + pad(date.getSeconds()) +
-        '.' + padMs(date.getMilliseconds()) +
-        dif + pad(Math.floor(Math.abs(tzo) / 60)) +
-        ':' + pad(Math.abs(tzo) % 60);
+    // Returns ISO string with JST offset (+09:00)
+    const jstDate = new Date(date.getTime() + JST_OFFSET_MS);
+    return jstDate.toISOString().replace('Z', '+09:00');
 }

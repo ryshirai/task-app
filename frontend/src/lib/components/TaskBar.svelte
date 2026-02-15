@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
-  import { type Task } from '$lib/types';
+  import { type TaskTimeLog, type TaskStatus } from '$lib/types';
   import { getTaskPosition, percentageToDate, snapTo15Min, toLocalISOString } from '$lib/utils';
   
-  export let task: Task;
+  export let task: TaskTimeLog;
   export let baseDate: Date;
 
   const dispatch = createEventDispatcher();
@@ -13,11 +13,16 @@
   $: left = isDragging ? draggedLeft : basePos.left;
   $: width = isDragging ? draggedWidth : basePos.width;
   
+  $: taskTitle = task.task_title || `Task #${task.task_id}`;
+  $: taskStatus = (task.task_status || 'todo') as TaskStatus;
+  $: taskProgressRate = task.task_progress_rate ?? 0;
+  $: taskTags = task.task_tags || [];
+
   let isOverdue = false;
   let interval: ReturnType<typeof setInterval>;
 
   function checkOverdue() {
-    if (task.status === 'done') {
+    if (taskStatus === 'done') {
       isOverdue = false;
       return;
     }
@@ -37,9 +42,9 @@
 
   // Dynamic coloring
   $: colorClass = (() => {
-    if (task.status === 'done') return 'bg-gray-400';
+    if (taskStatus === 'done') return 'bg-gray-400';
     if (isOverdue) return 'bg-red-500 animate-pulse';
-    if (task.status === 'doing') return 'bg-blue-500';
+    if (taskStatus === 'doing') return 'bg-blue-500';
     return 'bg-yellow-400 text-gray-800'; // todo
   })();
 
@@ -111,6 +116,7 @@
     if (!isDragging) return;
     
     isDragging = false;
+    const finishedDragMode = dragMode;
     dragMode = null; // Clear mode
     window.removeEventListener('mousemove', handleWindowMouseMove);
     window.removeEventListener('mouseup', handleWindowMouseUp);
@@ -125,7 +131,7 @@
     const newStart = snapTo15Min(percentageToDate(draggedLeft, baseDate));
     let newEnd: Date;
     
-    if (dragMode === 'move') {
+    if (finishedDragMode === 'move') {
       // Keep exact duration
       const durationMs = new Date(task.end_at).getTime() - new Date(task.start_at).getTime();
       newEnd = new Date(newStart.getTime() + durationMs);
@@ -153,7 +159,7 @@
   style="left: {left}%; width: {width}%; cursor: grab;"
   class:cursor-grabbing={isDragging && dragMode === 'move'}
   class:brightness-110={isDragging}
-  title="{task.title} ({statusMap[task.status]}, {task.progress_rate}%)"
+  title="{taskTitle} ({statusMap[taskStatus]}, {taskProgressRate}%)"
   on:mousedown={(e) => handleMouseDown(e, 'move')}
   role="button"
   tabindex="0"
@@ -168,11 +174,11 @@
   </div>
 
   <!-- Content -->
-  <div class="font-bold truncate pointer-events-none select-none text-[10px] leading-none drop-shadow-sm">{task.title}</div>
+  <div class="font-bold truncate pointer-events-none select-none text-[10px] leading-none drop-shadow-sm">{taskTitle}</div>
   
-  {#if task.tags && task.tags.length > 0}
+  {#if taskTags.length > 0}
     <div class="flex gap-0.5 mt-0.5 pointer-events-none overflow-hidden">
-      {#each task.tags as tag}
+      {#each taskTags as tag}
         <span class="bg-white/20 px-0.5 rounded-[1px] text-[7px] font-black uppercase tracking-tighter whitespace-nowrap border border-white/5">
           {tag}
         </span>
@@ -180,9 +186,9 @@
     </div>
   {/if}
 
-  {#if task.status === 'doing'}
+  {#if taskStatus === 'doing'}
     <div class="w-full bg-black/10 h-0.5 mt-0.5 rounded-full overflow-hidden pointer-events-none">
-      <div class="bg-white/90 h-full shadow-sm" style="width: {task.progress_rate}%"></div>
+      <div class="bg-white/90 h-full shadow-sm" style="width: {taskProgressRate}%"></div>
     </div>
   {/if}
 

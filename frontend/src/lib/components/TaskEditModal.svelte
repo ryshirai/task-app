@@ -1,32 +1,27 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
-  import { type Task } from '$lib/types';
-  import { formatTime, toLocalISOString } from '$lib/utils';
+  import { type TaskTimeLog } from '$lib/types';
+  import { toLocalISOString, formatTime } from '$lib/utils';
 
-  export let task: Task;
+  export let timeLog: TaskTimeLog;
 
   const dispatch = createEventDispatcher();
   
-  let title = task.title;
-  let status = task.status;
-  let progress_rate = task.progress_rate;
-  let tagsInput = (task.tags || []).join(', ');
-  let start_time = new Date(task.start_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false });
-  let end_time = new Date(task.end_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false });
+  let start_time = formatTime(new Date(timeLog.start_at));
+  let end_time = formatTime(new Date(timeLog.end_at));
 
   // Simple time input parsing (HH:MM -> Date)
   function parseTime(timeStr: string, baseDate: Date): Date {
     const [h, m] = timeStr.split(':').map(Number);
-    const d = new Date(baseDate);
-    d.setHours(h, m, 0, 0);
+    // baseDate is 00:00 JST. 
+    // We add h hours and m minutes to its absolute time.
+    const d = new Date(baseDate.getTime());
+    d.setUTCMinutes(d.getUTCMinutes() + (h * 60 + m));
     return d;
   }
 
   async function handleSave() {
-    // Validate inputs
-    if (!title.trim()) return;
-
-    const baseDate = new Date(task.start_at); // Keep original date, just update time
+    const baseDate = new Date(timeLog.start_at); // Keep original date, just update time
     const newStart = parseTime(start_time, baseDate);
     const newEnd = parseTime(end_time, baseDate);
 
@@ -37,11 +32,7 @@
     }
 
     const updatedTask = {
-      ...task,
-      title,
-      status,
-      progress_rate: Number(progress_rate),
-      tags: tagsInput.split(',').map(t => t.trim()).filter(t => t !== ''),
+      ...timeLog,
       start_at: toLocalISOString(newStart),
       end_at: toLocalISOString(newEnd)
     };
@@ -50,8 +41,8 @@
   }
 
   function handleDelete() {
-    if (confirm('このタスクを削除しますか？')) {
-      dispatch('delete', task.id);
+    if (confirm('この作業ログを削除しますか？')) {
+      dispatch('delete', timeLog.id);
     }
   }
 
@@ -72,29 +63,18 @@
 >
   <div class="p-6 bg-white">
     <div class="flex justify-between items-center mb-6">
-      <h3 class="text-xl font-bold text-slate-800">タスク編集</h3>
-      <button on:click={handleClose} class="text-slate-400 hover:text-slate-600" aria-label="タスク編集を閉じる">
+      <h3 class="text-xl font-bold text-slate-800">作業ログ編集</h3>
+      <button on:click={handleClose} class="text-slate-400 hover:text-slate-600" aria-label="作業ログ編集を閉じる">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
 
     <div class="space-y-4">
       <div>
-        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">タイトル</label>
-        <input 
-          bind:value={title} 
-          class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium"
-          placeholder="タスク名"
-        />
-      </div>
-
-      <div>
-        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">タグ (カンマ区切り)</label>
-        <input 
-          bind:value={tagsInput} 
-          class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 text-sm"
-          placeholder="Project A, 重要, 会議"
-        />
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">タスク</label>
+        <div class="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-sm font-semibold text-slate-700">
+          {timeLog.task_title || `Task #${timeLog.task_id}`}
+        </div>
       </div>
 
       <div class="grid grid-cols-2 gap-4">
@@ -116,29 +96,17 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="block text-xs font-bold text-slate-500 uppercase mb-1">ステータス</label>
-          <select 
-            bind:value={status}
-            class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white"
-          >
-            <option value="todo">未着手</option>
-            <option value="doing">進行中</option>
-            <option value="done">完了</option>
-          </select>
+      <div class="flex justify-between items-end">
+        <div class="text-xs text-slate-500">
+          このログの所要時間: <span class="font-bold text-slate-700">{Math.round(timeLog.duration_minutes)}</span> 分
         </div>
-        <div>
-          <label class="block text-xs font-bold text-slate-500 uppercase mb-1">進捗 ({progress_rate}%)</label>
-          <input 
-            type="range" 
-            min="0" 
-            max="100" 
-            step="10" 
-            bind:value={progress_rate}
-            class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900 mt-3"
-          />
-        </div>
+        {#if timeLog.total_duration_minutes}
+          <div class="text-xs text-slate-500 bg-slate-50 px-2 py-1 rounded border border-slate-100">
+            タスク合計: <span class="font-bold text-slate-900">
+              {Math.floor(timeLog.total_duration_minutes / 60)}時間{timeLog.total_duration_minutes % 60}分
+            </span>
+          </div>
+        {/if}
       </div>
     </div>
 

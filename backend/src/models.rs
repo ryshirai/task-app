@@ -24,14 +24,38 @@ pub struct Task {
     pub start_at: DateTime<Utc>,
     pub end_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
+    #[sqlx(default)]
+    pub total_duration_minutes: i64,
+}
+
+#[derive(Serialize, Deserialize, sqlx::FromRow, Clone, Debug)]
+pub struct TaskTimeLog {
+    pub id: i32,
+    pub organization_id: i32,
+    pub user_id: i32,
+    pub task_id: i32,
+    pub start_at: DateTime<Utc>,
+    pub end_at: DateTime<Utc>,
+    pub duration_minutes: i64,
+    #[sqlx(default)]
+    pub task_title: Option<String>,
+    #[sqlx(default)]
+    pub task_status: Option<String>,
+    #[sqlx(default)]
+    pub task_progress_rate: Option<i32>,
+    #[sqlx(default)]
+    pub task_tags: Option<Vec<String>>,
+    #[sqlx(default)]
+    pub total_duration_minutes: i64,
 }
 
 #[derive(Serialize, Deserialize, sqlx::FromRow)]
-pub struct TaskWithUser {
+pub struct TaskReportRow {
     #[serde(flatten)]
     #[sqlx(flatten)]
     pub task: Task,
     pub user_name: String,
+    pub total_duration_minutes: i64,
 }
 
 #[derive(Serialize, Deserialize, sqlx::FromRow)]
@@ -48,10 +72,10 @@ pub struct ActivityLog {
 }
 
 #[derive(Serialize)]
-pub struct UserWithTasks {
+pub struct UserWithTimeLogs {
     #[serde(flatten)]
     pub user: User,
-    pub tasks: Vec<Task>,
+    pub time_logs: Vec<TaskTimeLog>,
 }
 
 #[derive(Serialize, Deserialize, sqlx::FromRow)]
@@ -92,6 +116,22 @@ pub struct CreateTaskInput {
     pub tags: Option<Vec<String>>,
     pub start_at: DateTime<Utc>,
     pub end_at: DateTime<Utc>,
+}
+
+#[derive(Deserialize)]
+pub struct AddTimeLogInput {
+    pub user_id: i32,
+    pub task_id: Option<i32>,
+    pub title: Option<String>,
+    pub tags: Option<Vec<String>>,
+    pub start_at: DateTime<Utc>,
+    pub end_at: DateTime<Utc>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateTimeLogInput {
+    pub start_at: Option<DateTime<Utc>>,
+    pub end_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Deserialize)]
@@ -212,6 +252,12 @@ pub struct PaginatedLogs {
     pub total: i64,
     pub page: i64,
     pub total_pages: i64,
+}
+
+#[derive(Deserialize)]
+pub struct GetTasksQuery {
+    pub member_id: Option<i32>,
+    pub status: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, sqlx::FromRow)]

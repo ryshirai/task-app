@@ -57,13 +57,13 @@ fn append_task_report_filters(
 
     if let Some(start_date) = query.start_date {
         query_builder
-            .push(" AND t.start_at::date >= ")
+            .push(" AND (l.start_at AT TIME ZONE 'Asia/Tokyo')::date >= ")
             .push_bind(start_date);
     }
 
     if let Some(end_date) = query.end_date {
         query_builder
-            .push(" AND t.end_at::date <= ")
+            .push(" AND (l.end_at AT TIME ZONE 'Asia/Tokyo')::date <= ")
             .push_bind(end_date);
     }
 
@@ -90,17 +90,25 @@ async fn fetch_task_report_rows(
     state: &AppState,
     organization_id: i32,
     query: &TaskReportQuery,
-) -> Result<Vec<TaskWithUser>, (StatusCode, String)> {
+) -> Result<Vec<TaskReportRow>, (StatusCode, String)> {
     let mut query_builder = QueryBuilder::<Postgres>::new(
-        "SELECT t.id, t.organization_id, t.member_id, t.title, t.status, t.progress_rate, t.tags, t.start_at, t.end_at, t.created_at, \
+        "SELECT t.id, t.organization_id, t.member_id, t.title, t.status, t.progress_rate, t.tags, 
+         COALESCE(MIN(l.start_at), t.start_at) as start_at, 
+         COALESCE(MAX(l.end_at), t.end_at) as end_at, 
+         t.created_at,
+         COALESCE(SUM(l.duration_minutes), 0)::BIGINT AS total_duration_minutes, \
          u.name AS user_name FROM tasks t \
-         JOIN users u ON t.member_id = u.id",
+         JOIN users u ON t.member_id = u.id \
+         LEFT JOIN task_time_logs l ON l.task_id = t.id AND l.organization_id = t.organization_id",
     );
     append_task_report_filters(&mut query_builder, query, organization_id);
-    query_builder.push(" ORDER BY t.start_at ASC, t.id ASC");
+    query_builder.push(
+        " GROUP BY t.id, t.organization_id, t.member_id, t.title, t.status, t.progress_rate, t.tags, t.start_at, t.end_at, t.created_at, u.name \
+          ORDER BY start_at ASC, t.id ASC",
+    );
 
     query_builder
-        .build_query_as::<TaskWithUser>()
+        .build_query_as::<TaskReportRow>()
         .fetch_all(&state.pool)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
@@ -114,8 +122,10 @@ fn csv_escape(value: &str) -> String {
     }
 }
 
-fn task_report_to_csv(rows: &[TaskWithUser]) -> String {
-    let mut csv = String::from("担当者,タスク名,ステータス,進捗率,タグ,開始日時,終了日時\n");
+fn task_report_to_csv(rows: &[TaskReportRow]) -> String {
+    let mut csv =
+        String::from("担当者,タスク名,ステータス,進捗率,タグ,開始日時,終了日時,Total Duration (Hours)\n");
+    let offset = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
     for row in rows {
         let tags = row
             .task
@@ -124,17 +134,291 @@ fn task_report_to_csv(rows: &[TaskWithUser]) -> String {
             .map(|v| v.join("|"))
             .unwrap_or_default();
         csv.push_str(&format!(
-            "{},{},{},{},{},{},{}\n",
+            "{},{},{},{},{},{},{},{}\n",
             csv_escape(&row.user_name),
             csv_escape(&row.task.title),
             csv_escape(&row.task.status),
             row.task.progress_rate,
             csv_escape(&tags),
-            csv_escape(&row.task.start_at.to_rfc3339()),
-            csv_escape(&row.task.end_at.to_rfc3339()),
+            csv_escape(&row.task.start_at.with_timezone(&offset).to_rfc3339()),
+            csv_escape(&row.task.end_at.with_timezone(&offset).to_rfc3339()),
+            format!("{:.2}", row.total_duration_minutes as f64 / 60.0),
         ));
     }
     csv
+}
+
+async fn fetch_time_log_with_task(
+    state: &AppState,
+    organization_id: i32,
+    time_log_id: i32,
+) -> Result<TaskTimeLog, (StatusCode, String)> {
+    sqlx::query_as::<_, TaskTimeLog>(
+        "SELECT l.id, l.organization_id, l.user_id, l.task_id, l.start_at, l.end_at, l.duration_minutes::BIGINT AS duration_minutes,
+                t.title AS task_title, t.status AS task_status, t.progress_rate AS task_progress_rate, t.tags AS task_tags,
+                COALESCE(sums.total, 0)::BIGINT AS total_duration_minutes
+         FROM task_time_logs l
+         JOIN tasks t ON t.id = l.task_id AND t.organization_id = l.organization_id
+         LEFT JOIN (
+             SELECT task_id, SUM(duration_minutes) as total 
+             FROM task_time_logs 
+             GROUP BY task_id
+         ) sums ON sums.task_id = l.task_id
+         WHERE l.id = $1 AND l.organization_id = $2",
+    )
+    .bind(time_log_id)
+    .bind(organization_id)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+pub async fn add_time_log(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(input): Json<AddTimeLogInput>,
+) -> Result<(StatusCode, Json<TaskTimeLog>), (StatusCode, String)> {
+    if input.end_at <= input.start_at {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "end_at must be after start_at".to_string(),
+        ));
+    }
+
+    if !user_in_organization(&state, claims.organization_id, input.user_id).await? {
+        return Err((StatusCode::BAD_REQUEST, "Invalid user_id".to_string()));
+    }
+
+    let task_id = if let Some(task_id) = input.task_id {
+        let task = sqlx::query_as::<_, Task>(
+            "SELECT t.*, COALESCE(SUM(l.duration_minutes), 0)::BIGINT AS total_duration_minutes 
+             FROM tasks t 
+             LEFT JOIN task_time_logs l ON l.task_id = t.id 
+             WHERE t.id = $1 AND t.organization_id = $2
+             GROUP BY t.id",
+        )
+        .bind(task_id)
+        .bind(claims.organization_id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((StatusCode::NOT_FOUND, "Task not found".to_string()))?;
+
+        if task.member_id != input.user_id {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "Selected task does not belong to user_id".to_string(),
+            ));
+        }
+
+        task.id
+    } else {
+        let title = input
+            .title
+            .as_ref()
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .ok_or((StatusCode::BAD_REQUEST, "title is required".to_string()))?;
+
+        // Search for an existing task with the same title that is not done
+        let existing_task = sqlx::query_as::<_, Task>(
+            "SELECT * FROM tasks 
+             WHERE organization_id = $1 AND member_id = $2 AND title = $3 AND status != 'done'
+             ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(claims.organization_id)
+        .bind(input.user_id)
+        .bind(title)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        if let Some(task) = existing_task {
+            task.id
+        } else {
+            let created_task = sqlx::query_as::<_, Task>(
+                "INSERT INTO tasks (organization_id, member_id, title, tags, start_at, end_at)
+                 VALUES ($1, $2, $3, $4, $5, $6)
+                 RETURNING *",
+            )
+            .bind(claims.organization_id)
+            .bind(input.user_id)
+            .bind(title)
+            .bind(&input.tags)
+            .bind(input.start_at)
+            .bind(input.end_at)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+            created_task.id
+        }
+    };
+
+    let inserted_time_log_id = sqlx::query_scalar::<_, i32>(
+        "INSERT INTO task_time_logs (organization_id, user_id, task_id, start_at, end_at)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id",
+    )
+    .bind(claims.organization_id)
+    .bind(input.user_id)
+    .bind(task_id)
+    .bind(input.start_at)
+    .bind(input.end_at)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let time_log = fetch_time_log_with_task(&state, claims.organization_id, inserted_time_log_id).await?;
+
+    log_activity(
+        &state.pool,
+        claims.organization_id,
+        claims.user_id,
+        "time_log_added",
+        "task_time_log",
+        Some(time_log.id),
+        Some(format!("task_id={}, user_id={}", time_log.task_id, time_log.user_id)),
+    )
+    .await;
+
+    Ok((StatusCode::CREATED, Json(time_log)))
+}
+
+pub async fn update_time_log(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(id): Path<i32>,
+    Json(input): Json<UpdateTimeLogInput>,
+) -> Result<Json<TaskTimeLog>, (StatusCode, String)> {
+    let current_log = sqlx::query_as::<_, TaskTimeLog>(
+        "SELECT id, organization_id, user_id, task_id, start_at, end_at, duration_minutes::BIGINT AS duration_minutes
+         FROM task_time_logs
+         WHERE id = $1 AND organization_id = $2",
+    )
+    .bind(id)
+    .bind(claims.organization_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "Time log not found".to_string()))?;
+
+    let next_start_at = input.start_at.unwrap_or(current_log.start_at);
+    let next_end_at = input.end_at.unwrap_or(current_log.end_at);
+    if next_end_at <= next_start_at {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "end_at must be after start_at".to_string(),
+        ));
+    }
+
+    sqlx::query(
+        "UPDATE task_time_logs
+         SET start_at = COALESCE($1, start_at),
+             end_at = COALESCE($2, end_at)
+         WHERE id = $3 AND organization_id = $4",
+    )
+    .bind(input.start_at)
+    .bind(input.end_at)
+    .bind(id)
+    .bind(claims.organization_id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let updated_log = fetch_time_log_with_task(&state, claims.organization_id, id).await?;
+
+    log_activity(
+        &state.pool,
+        claims.organization_id,
+        claims.user_id,
+        "time_log_updated",
+        "task_time_log",
+        Some(updated_log.id),
+        Some(
+            json!({
+                "start_at": updated_log.start_at,
+                "end_at": updated_log.end_at,
+                "duration_minutes": updated_log.duration_minutes
+            })
+            .to_string(),
+        ),
+    )
+    .await;
+
+    Ok(Json(updated_log))
+}
+
+pub async fn delete_time_log(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(id): Path<i32>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let deleted = sqlx::query(
+        "DELETE FROM task_time_logs
+         WHERE id = $1 AND organization_id = $2",
+    )
+    .bind(id)
+    .bind(claims.organization_id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if deleted.rows_affected() == 0 {
+        return Err((StatusCode::NOT_FOUND, "Time log not found".to_string()));
+    }
+
+    log_activity(
+        &state.pool,
+        claims.organization_id,
+        claims.user_id,
+        "time_log_deleted",
+        "task_time_log",
+        Some(id),
+        None,
+    )
+    .await;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn get_tasks(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(query): Query<GetTasksQuery>,
+) -> Result<Json<Vec<Task>>, (StatusCode, String)> {
+    let mut query_builder = QueryBuilder::<Postgres>::new(
+        "SELECT t.*, COALESCE(SUM(l.duration_minutes), 0)::BIGINT AS total_duration_minutes
+         FROM tasks t
+         LEFT JOIN task_time_logs l ON l.task_id = t.id
+         WHERE t.organization_id = "
+    );
+    query_builder.push_bind(claims.organization_id);
+
+    if let Some(member_id) = query.member_id {
+        query_builder.push(" AND t.member_id = ");
+        query_builder.push_bind(member_id);
+    }
+
+    if let Some(status) = query.status {
+        let statuses: Vec<String> = status
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .collect();
+        query_builder.push(" AND t.status = ANY(");
+        query_builder.push_bind(statuses);
+        query_builder.push(")");
+    }
+
+    query_builder.push(" GROUP BY t.id ORDER BY t.created_at DESC");
+
+    let tasks = query_builder
+        .build_query_as::<Task>()
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(tasks))
 }
 
 pub async fn create_task(
@@ -147,7 +431,15 @@ pub async fn create_task(
     }
 
     let task = sqlx::query_as::<_, Task>(
-        "INSERT INTO tasks (organization_id, member_id, title, tags, start_at, end_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+        "WITH created AS (
+            INSERT INTO tasks (organization_id, member_id, title, tags, start_at, end_at) 
+            VALUES ($1, $2, $3, $4, $5, $6) 
+            RETURNING *
+        )
+        SELECT c.*, COALESCE(SUM(l.duration_minutes), 0)::BIGINT AS total_duration_minutes 
+        FROM created c
+        LEFT JOIN task_time_logs l ON l.task_id = c.id
+        GROUP BY c.id, c.organization_id, c.member_id, c.title, c.status, c.progress_rate, c.tags, c.start_at, c.end_at, c.created_at",
     )
     .bind(claims.organization_id)
     .bind(input.member_id)
@@ -216,15 +508,21 @@ pub async fn update_task(
     }
 
     let task = sqlx::query_as::<_, Task>(
-        "UPDATE tasks SET 
-            member_id = COALESCE($1, member_id),
-            title = COALESCE($2, title),
-            status = COALESCE($3, status),
-            progress_rate = COALESCE($4, progress_rate),
-            tags = COALESCE($5, tags),
-            start_at = COALESCE($6, start_at),
-            end_at = COALESCE($7, end_at)
-        WHERE id = $8 AND organization_id = $9 RETURNING *",
+        "WITH updated AS (
+            UPDATE tasks SET 
+                member_id = COALESCE($1, member_id),
+                title = COALESCE($2, title),
+                status = COALESCE($3, status),
+                progress_rate = COALESCE($4, progress_rate),
+                tags = COALESCE($5, tags),
+                start_at = COALESCE($6, start_at),
+                end_at = COALESCE($7, end_at)
+            WHERE id = $8 AND organization_id = $9 RETURNING *
+        )
+        SELECT u.*, COALESCE(SUM(l.duration_minutes), 0)::BIGINT AS total_duration_minutes 
+        FROM updated u 
+        LEFT JOIN task_time_logs l ON l.task_id = u.id 
+        GROUP BY u.id, u.organization_id, u.member_id, u.title, u.status, u.progress_rate, u.tags, u.start_at, u.end_at, u.created_at",
     )
     .bind(input.member_id)
     .bind(input.title)
@@ -343,7 +641,7 @@ pub async fn get_task_report(
     State(state): State<AppState>,
     Query(query): Query<TaskReportQuery>,
     Extension(claims): Extension<Claims>,
-) -> Result<Json<Vec<TaskWithUser>>, (StatusCode, String)> {
+) -> Result<Json<Vec<TaskReportRow>>, (StatusCode, String)> {
     if claims.role != "admin" {
         return Err((StatusCode::FORBIDDEN, "Admin access required".to_string()));
     }
