@@ -1,5 +1,6 @@
 <script lang="ts">
   import TimelineContainer from '$lib/components/TimelineContainer.svelte';
+  import TaskForm from '$lib/components/TaskForm.svelte';
   import TaskEditModal from '$lib/components/TaskEditModal.svelte';
   import UserManagementModal from '$lib/components/UserManagementModal.svelte';
   import ProfileModal from '$lib/components/ProfileModal.svelte';
@@ -21,6 +22,7 @@
   let showReportModal = false;
   let showReportsModal = false;
   let showLogsModal = false;
+  let taskFormSelection: { member_id: number; start: Date; end: Date } | null = null;
   let pollInterval: ReturnType<typeof setInterval> | null = null;
   let taskWebSocketClient: TaskWebSocketClient | null = null;
   let taskEventUnsubscribers: Array<() => void> = [];
@@ -165,12 +167,13 @@
       fetchUsers();
   }
 
-  async function handleCreateTask(event: CustomEvent<{ member_id: number; title: string; tags: string[]; start: Date; end: Date }>) {
-    const { member_id, title, start, end } = event.detail;
-    
+  type CreateTaskPayload = { member_id: number; title: string; tags: string[]; start: Date; end: Date };
+
+  async function createTask({ member_id, title, tags, start, end }: CreateTaskPayload) {
     const newTaskData = {
       member_id,
       title,
+      tags,
       start_at: start.toISOString(),
       end_at: end.toISOString()
     };
@@ -178,7 +181,7 @@
     try {
       const res = await fetch('http://localhost:3000/api/tasks', {
         method: 'POST',
-        headers: { 
+        headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${$auth.token}`
         },
@@ -186,9 +189,9 @@
       });
 
       if (!res.ok) throw new Error('Failed to create task');
-      
+
       const createdTask = await res.json();
-      
+
       users = users.map(u => {
         if (u.id === member_id) {
           return { ...u, tasks: [...u.tasks, createdTask] };
@@ -198,7 +201,21 @@
     } catch (e) {
       console.error('Error creating task:', e);
       alert('タスクの作成に失敗しました。');
+    } finally {
+      taskFormSelection = null;
     }
+  }
+
+  function handleOpenTaskForm(event: CustomEvent<{ member_id: number; start: Date; end: Date }>) {
+    taskFormSelection = event.detail;
+  }
+
+  async function handleTaskFormSubmit(event: CustomEvent<{ title: string; tags: string[]; start: Date; end: Date }>) {
+    if (!taskFormSelection) return;
+    await createTask({
+      member_id: taskFormSelection.member_id,
+      ...event.detail
+    });
   }
 
   async function handleUpdateTask(event: CustomEvent<Task>) {
@@ -409,7 +426,7 @@
     </div>
   </header>
 
-  <main class="flex-1 min-h-0 flex flex-col p-2 overflow-hidden">
+  <main class="flex-1 min-h-0 flex flex-col p-1 overflow-hidden">
     {#if loading}
       <div class="flex-1 flex items-center justify-center text-slate-400 font-bold animate-pulse">ダッシュボードを読み込み中...</div>
     {:else if error}
@@ -418,7 +435,7 @@
       <TimelineContainer 
         members={filteredUsers} 
         {baseDate}
-        on:createTask={handleCreateTask} 
+        on:openTaskForm={handleOpenTaskForm}
         on:editTask={(e) => editingTask = e.detail}
         on:updateTask={(e) => handleUpdateTask(e)}
       />
@@ -431,6 +448,15 @@
       on:close={() => editingTask = null}
       on:save={handleUpdateTask}
       on:delete={handleDeleteTask}
+    />
+  {/if}
+
+  {#if taskFormSelection}
+    <TaskForm
+      start={taskFormSelection.start}
+      end={taskFormSelection.end}
+      on:submit={handleTaskFormSubmit}
+      on:cancel={() => taskFormSelection = null}
     />
   {/if}
 
