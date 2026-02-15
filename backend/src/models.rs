@@ -168,6 +168,12 @@ pub struct UpdateReportInput {
 }
 
 #[derive(Deserialize)]
+pub struct ReportQuery {
+    pub date: Option<NaiveDate>,
+    pub user_id: Option<i32>,
+}
+
+#[derive(Deserialize)]
 pub struct GetUsersQuery {
     pub date: Option<NaiveDate>,
 }
