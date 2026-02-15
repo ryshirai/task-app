@@ -6,6 +6,7 @@ use axum::{
 use crate::models::*;
 use crate::AppState;
 use crate::handlers::log_activity;
+use serde_json::json;
 
 pub async fn get_reports(
     State(state): State<AppState>,
@@ -120,6 +121,15 @@ pub async fn update_report(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    let mut changes = Vec::new();
+    if report.content != updated_report.content {
+        changes.push(json!({
+            "field": "content",
+            "old": &report.content,
+            "new": &updated_report.content
+        }));
+    }
+
     log_activity(
         &state.pool,
         claims.organization_id,
@@ -127,7 +137,7 @@ pub async fn update_report(
         "report_updated",
         "report",
         Some(updated_report.id),
-        None,
+        Some(json!({ "changes": changes }).to_string()),
     ).await;
 
     Ok(Json(updated_report))

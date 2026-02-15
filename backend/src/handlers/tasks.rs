@@ -52,6 +52,16 @@ pub async fn update_task(
     Path(id): Path<i32>,
     Json(input): Json<UpdateTaskInput>,
 ) -> Result<Json<Task>, (StatusCode, String)> {
+    let current_task = sqlx::query_as::<_, Task>(
+        "SELECT * FROM tasks WHERE id = $1 AND organization_id = $2",
+    )
+    .bind(id)
+    .bind(claims.organization_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "Task not found".to_string()))?;
+
     let task = sqlx::query_as::<_, Task>(
         "UPDATE tasks SET 
             title = COALESCE($1, title),
@@ -74,6 +84,30 @@ pub async fn update_task(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    let mut changes = Vec::new();
+    if current_task.title != task.title {
+        changes.push(json!({ "field": "title", "old": &current_task.title, "new": &task.title }));
+    }
+    if current_task.status != task.status {
+        changes.push(json!({ "field": "status", "old": &current_task.status, "new": &task.status }));
+    }
+    if current_task.progress_rate != task.progress_rate {
+        changes.push(json!({
+            "field": "progress_rate",
+            "old": current_task.progress_rate,
+            "new": task.progress_rate
+        }));
+    }
+    if current_task.tags != task.tags {
+        changes.push(json!({ "field": "tags", "old": &current_task.tags, "new": &task.tags }));
+    }
+    if current_task.start_at != task.start_at {
+        changes.push(json!({ "field": "start_at", "old": &current_task.start_at, "new": &task.start_at }));
+    }
+    if current_task.end_at != task.end_at {
+        changes.push(json!({ "field": "end_at", "old": &current_task.end_at, "new": &task.end_at }));
+    }
+
     log_activity(
         &state.pool,
         claims.organization_id,
@@ -81,7 +115,7 @@ pub async fn update_task(
         "task_updated",
         "task",
         Some(task.id),
-        Some(format!("Status: {}, Progress: {}%", task.status, task.progress_rate)),
+        Some(json!({ "changes": changes }).to_string()),
     ).await;
 
     let _ = state.tx.send(WsMessage {
