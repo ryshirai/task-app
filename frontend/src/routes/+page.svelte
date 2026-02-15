@@ -52,7 +52,11 @@
       (t.task_title || '').toLowerCase().includes(filterText.toLowerCase()) ||
       (t.task_tags || []).some(tag => tag.toLowerCase().includes(filterText.toLowerCase()))
     )
-  }));
+  })).sort((a, b) => {
+    if (a.id === $auth.user?.id) return -1;
+    if (b.id === $auth.user?.id) return 1;
+    return 0;
+  });
 
   async function fetchUsers(silent = false) {
     if (!$auth.token || editingTask || showUserManagement || showProfile) return;
