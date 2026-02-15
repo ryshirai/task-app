@@ -7,6 +7,7 @@
   import DailyReportModal from '$lib/components/DailyReportModal.svelte';
   import ReportListModal from '$lib/components/ReportListModal.svelte';
   import ActivityLogModal from '$lib/components/ActivityLogModal.svelte';
+  import { TaskWebSocketClient } from '$lib/websocket';
   import { type User, type Task } from '$lib/types';
   import { auth, logout } from '$lib/auth';
   import { onMount, onDestroy } from 'svelte';
@@ -20,7 +21,9 @@
   let showReportModal = false;
   let showReportsModal = false;
   let showLogsModal = false;
-  let pollInterval: ReturnType<typeof setInterval>;
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
+  let taskWebSocketClient: TaskWebSocketClient | null = null;
+  let taskEventUnsubscribers: Array<() => void> = [];
   let filterText = '';
   let selectedDate = new Date().toISOString().split('T')[0];
 
@@ -61,10 +64,79 @@
     }
   }
 
+  type TaskDeletedPayload = { id: number };
+
+  function applyTaskCreated(task: Task) {
+    const user = users.find(u => u.id === task.member_id);
+    if (!user) return;
+    if (user.tasks.some(t => t.id === task.id)) return;
+    user.tasks.push(task);
+    users = users;
+  }
+
+  function applyTaskUpdated(task: Task) {
+    let changed = false;
+
+    const previousUser = users.find(u => u.tasks.some(t => t.id === task.id));
+    if (previousUser && previousUser.id !== task.member_id) {
+      const previousTaskIndex = previousUser.tasks.findIndex(t => t.id === task.id);
+      if (previousTaskIndex !== -1) {
+        previousUser.tasks.splice(previousTaskIndex, 1);
+        changed = true;
+      }
+    }
+
+    const currentUser = users.find(u => u.id === task.member_id);
+    if (!currentUser) {
+      if (changed) users = users;
+      return;
+    }
+
+    const currentTaskIndex = currentUser.tasks.findIndex(t => t.id === task.id);
+    if (currentTaskIndex !== -1) {
+      currentUser.tasks[currentTaskIndex] = task;
+    } else {
+      currentUser.tasks.push(task);
+    }
+    users = users;
+  }
+
+  function applyTaskDeleted(payload: TaskDeletedPayload) {
+    for (const user of users) {
+      const taskIndex = user.tasks.findIndex(t => t.id === payload.id);
+      if (taskIndex !== -1) {
+        user.tasks.splice(taskIndex, 1);
+        users = users;
+        return;
+      }
+    }
+  }
+
+  function connectTaskWebSocket() {
+    if (!$auth.token || taskWebSocketClient) return;
+
+    const client = new TaskWebSocketClient($auth.token);
+    taskEventUnsubscribers = [
+      client.subscribe<Task>('task_created', (task: Task) => applyTaskCreated(task)),
+      client.subscribe<Task>('task_updated', (task: Task) => applyTaskUpdated(task)),
+      client.subscribe<TaskDeletedPayload>('task_deleted', (payload: TaskDeletedPayload) => applyTaskDeleted(payload))
+    ];
+    client.connect();
+    taskWebSocketClient = client;
+  }
+
+  function disconnectTaskWebSocket() {
+    taskEventUnsubscribers.forEach(unsubscribe => unsubscribe());
+    taskEventUnsubscribers = [];
+    taskWebSocketClient?.disconnect();
+    taskWebSocketClient = null;
+  }
+
   onMount(() => {
     if ($auth.token) {
         fetchUsers();
-        pollInterval = setInterval(() => fetchUsers(true), 5000);
+        pollInterval = setInterval(() => fetchUsers(true), 30000);
+        connectTaskWebSocket();
     } else {
         loading = false;
     }
@@ -72,11 +144,21 @@
 
   onDestroy(() => {
     if (pollInterval) clearInterval(pollInterval);
+    disconnectTaskWebSocket();
   });
 
   $: if ($auth.token && !pollInterval) {
       fetchUsers();
-      pollInterval = setInterval(() => fetchUsers(true), 5000);
+      pollInterval = setInterval(() => fetchUsers(true), 30000);
+      connectTaskWebSocket();
+  }
+
+  $: if (!$auth.token) {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+      disconnectTaskWebSocket();
   }
 
   $: if (selectedDate && $auth.token) {

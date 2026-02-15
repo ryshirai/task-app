@@ -4,6 +4,7 @@ pub mod tasks;
 pub mod reports;
 pub mod invitations;
 pub mod logs;
+pub mod ws;
 
 use sqlx::{Pool, Postgres};
 
