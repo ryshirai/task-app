@@ -519,6 +519,14 @@
         >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>
         </button>
+        {#if $auth.user?.role === 'admin'}
+        <button
+            on:click={() => goto('/admin/task-reports')}
+            class="px-2.5 py-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-all text-[10px] font-bold border border-transparent hover:border-slate-200"
+        >
+            タスクレポート
+        </button>
+        {/if}
         <button 
             on:click={() => goto('/reports/new')}
             class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-all text-[10px] font-bold shadow-sm"

@@ -4,10 +4,12 @@ use crate::handlers::{log_activity, notify_user};
 use crate::models::*;
 use axum::{
     Extension, Json,
-    extract::{Path, State},
-    http::StatusCode,
+    extract::{Path, Query, State},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
+    response::IntoResponse,
 };
 use serde_json::json;
+use sqlx::{Postgres, QueryBuilder};
 
 async fn user_in_organization(
     state: &AppState,
@@ -24,6 +26,115 @@ async fn user_in_organization(
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok(exists)
+}
+
+fn validate_report_date_range(query: &TaskReportQuery) -> Result<(), (StatusCode, String)> {
+    if let (Some(start), Some(end)) = (query.start_date, query.end_date) {
+        if start > end {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "start_date must be before or equal to end_date".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn append_task_report_filters(
+    query_builder: &mut QueryBuilder<Postgres>,
+    query: &TaskReportQuery,
+    organization_id: i32,
+) {
+    query_builder
+        .push(" WHERE t.organization_id = ")
+        .push_bind(organization_id);
+
+    if let Some(member_id) = query.member_id {
+        query_builder
+            .push(" AND t.member_id = ")
+            .push_bind(member_id);
+    }
+
+    if let Some(start_date) = query.start_date {
+        query_builder
+            .push(" AND t.start_at::date >= ")
+            .push_bind(start_date);
+    }
+
+    if let Some(end_date) = query.end_date {
+        query_builder
+            .push(" AND t.end_at::date <= ")
+            .push_bind(end_date);
+    }
+
+    if let Some(statuses) = &query.statuses {
+        let statuses: Vec<String> = statuses
+            .split(',')
+            .map(str::trim)
+            .filter(|status| !status.is_empty())
+            .map(str::to_string)
+            .collect();
+
+        if statuses.is_empty() {
+            return;
+        }
+
+        query_builder
+            .push(" AND t.status = ANY(")
+            .push_bind(statuses)
+            .push(")");
+    }
+}
+
+async fn fetch_task_report_rows(
+    state: &AppState,
+    organization_id: i32,
+    query: &TaskReportQuery,
+) -> Result<Vec<TaskWithUser>, (StatusCode, String)> {
+    let mut query_builder = QueryBuilder::<Postgres>::new(
+        "SELECT t.id, t.organization_id, t.member_id, t.title, t.status, t.progress_rate, t.tags, t.start_at, t.end_at, t.created_at, \
+         u.name AS user_name FROM tasks t \
+         JOIN users u ON t.member_id = u.id",
+    );
+    append_task_report_filters(&mut query_builder, query, organization_id);
+    query_builder.push(" ORDER BY t.start_at ASC, t.id ASC");
+
+    query_builder
+        .build_query_as::<TaskWithUser>()
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+fn csv_escape(value: &str) -> String {
+    if value.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
+}
+
+fn task_report_to_csv(rows: &[TaskWithUser]) -> String {
+    let mut csv = String::from("担当者,タスク名,ステータス,進捗率,タグ,開始日時,終了日時\n");
+    for row in rows {
+        let tags = row
+            .task
+            .tags
+            .as_ref()
+            .map(|v| v.join("|"))
+            .unwrap_or_default();
+        csv.push_str(&format!(
+            "{},{},{},{},{},{},{}\n",
+            csv_escape(&row.user_name),
+            csv_escape(&row.task.title),
+            csv_escape(&row.task.status),
+            row.task.progress_rate,
+            csv_escape(&tags),
+            csv_escape(&row.task.start_at.to_rfc3339()),
+            csv_escape(&row.task.end_at.to_rfc3339()),
+        ));
+    }
+    csv
 }
 
 pub async fn create_task(
@@ -226,4 +337,41 @@ pub async fn delete_task(
     });
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn get_task_report(
+    State(state): State<AppState>,
+    Query(query): Query<TaskReportQuery>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<Vec<TaskWithUser>>, (StatusCode, String)> {
+    if claims.role != "admin" {
+        return Err((StatusCode::FORBIDDEN, "Admin access required".to_string()));
+    }
+
+    validate_report_date_range(&query)?;
+    let rows = fetch_task_report_rows(&state, claims.organization_id, &query).await?;
+    Ok(Json(rows))
+}
+
+pub async fn export_task_report(
+    State(state): State<AppState>,
+    Query(query): Query<TaskReportQuery>,
+    Extension(claims): Extension<Claims>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    if claims.role != "admin" {
+        return Err((StatusCode::FORBIDDEN, "Admin access required".to_string()));
+    }
+
+    validate_report_date_range(&query)?;
+    let rows = fetch_task_report_rows(&state, claims.organization_id, &query).await?;
+    let csv = task_report_to_csv(&rows);
+
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("text/csv"));
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_static("attachment; filename=\"task_report.csv\""),
+    );
+
+    Ok((headers, csv))
 }
