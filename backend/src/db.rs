@@ -1,8 +1,8 @@
-use sqlx::{Pool, Postgres};
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
     Argon2,
+    password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
 };
+use sqlx::{Pool, Postgres};
 
 pub async fn seed_data(pool: &Pool<Postgres>) -> Result<(), sqlx::Error> {
     let salt = SaltString::generate(&mut OsRng);
@@ -25,10 +25,21 @@ pub async fn seed_data(pool: &Pool<Postgres>) -> Result<(), sqlx::Error> {
         .bind("admin")
         .execute(pool)
         .await?;
-    
-    let _ = sqlx::query("UPDATE tasks SET organization_id = $1 WHERE organization_id IS NULL").bind(org_id.0).execute(pool).await;
-    let _ = sqlx::query("UPDATE daily_reports SET organization_id = $1 WHERE organization_id IS NULL").bind(org_id.0).execute(pool).await;
-    let _ = sqlx::query("UPDATE activity_logs SET organization_id = $1 WHERE organization_id IS NULL").bind(org_id.0).execute(pool).await;
+
+    let _ = sqlx::query("UPDATE tasks SET organization_id = $1 WHERE organization_id IS NULL")
+        .bind(org_id.0)
+        .execute(pool)
+        .await;
+    let _ =
+        sqlx::query("UPDATE daily_reports SET organization_id = $1 WHERE organization_id IS NULL")
+            .bind(org_id.0)
+            .execute(pool)
+            .await;
+    let _ =
+        sqlx::query("UPDATE activity_logs SET organization_id = $1 WHERE organization_id IS NULL")
+            .bind(org_id.0)
+            .execute(pool)
+            .await;
 
     println!("Admin user verified/updated.");
     Ok(())

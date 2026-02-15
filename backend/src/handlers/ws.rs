@@ -1,14 +1,14 @@
-use axum::{
-    extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
-        State,
-    },
-    response::IntoResponse,
-    Extension,
-};
-use futures::{sink::SinkExt, stream::StreamExt};
 use crate::AppState;
 use crate::models::Claims;
+use axum::{
+    Extension,
+    extract::{
+        State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
+    },
+    response::IntoResponse,
+};
+use futures::{sink::SinkExt, stream::StreamExt};
 
 pub async fn ws_handler(
     ws: WebSocketUpgrade,

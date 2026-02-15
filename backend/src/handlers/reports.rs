@@ -1,11 +1,11 @@
-use axum::{
-    extract::{Path, State, Query},
-    http::StatusCode,
-    Json, Extension,
-};
-use crate::models::*;
 use crate::AppState;
 use crate::handlers::log_activity;
+use crate::models::*;
+use axum::{
+    Extension, Json,
+    extract::{Path, Query, State},
+    http::StatusCode,
+};
 use serde_json::json;
 
 pub async fn get_reports(
@@ -35,7 +35,8 @@ pub async fn get_reports(
         q = q.bind(user_id);
     }
 
-    let reports = q.fetch_all(&state.pool)
+    let reports = q
+        .fetch_all(&state.pool)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
@@ -47,13 +48,15 @@ pub async fn get_report(
     Extension(claims): Extension<Claims>,
     Path(id): Path<i32>,
 ) -> Result<Json<DailyReport>, (StatusCode, String)> {
-    let report = sqlx::query_as::<_, DailyReport>("SELECT * FROM daily_reports WHERE id = $1 AND organization_id = $2")
-        .bind(id)
-        .bind(claims.organization_id)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "Report not found".to_string()))?;
+    let report = sqlx::query_as::<_, DailyReport>(
+        "SELECT * FROM daily_reports WHERE id = $1 AND organization_id = $2",
+    )
+    .bind(id)
+    .bind(claims.organization_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "Report not found".to_string()))?;
 
     Ok(Json(report))
 }
@@ -63,7 +66,7 @@ pub async fn create_report(
     Extension(claims): Extension<Claims>,
     Json(input): Json<CreateReportInput>,
 ) -> Result<(StatusCode, Json<DailyReport>), (StatusCode, String)> {
-    let user_id = claims.user_id; 
+    let user_id = claims.user_id;
 
     let report = sqlx::query_as::<_, DailyReport>(
         "INSERT INTO daily_reports (organization_id, user_id, report_date, content) VALUES ($1, $2, $3, $4) 
@@ -85,7 +88,8 @@ pub async fn create_report(
         "report",
         Some(report.id),
         Some(format!("Date: {}", report.report_date)),
-    ).await;
+    )
+    .await;
 
     Ok((StatusCode::CREATED, Json(report)))
 }
@@ -99,16 +103,21 @@ pub async fn update_report(
     // 権限確認 (自身のレポートか、管理者であること)
     // 完全に1クエリにまとめることも可能だが、ビジネスロジック（Admin権限）の可読性と
     // 安全性のために、まず対象が存在し、かつ権限があるかを確認する
-    let report = sqlx::query_as::<_, DailyReport>("SELECT * FROM daily_reports WHERE id = $1 AND organization_id = $2")
-        .bind(id)
-        .bind(claims.organization_id)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "Report not found".to_string()))?;
+    let report = sqlx::query_as::<_, DailyReport>(
+        "SELECT * FROM daily_reports WHERE id = $1 AND organization_id = $2",
+    )
+    .bind(id)
+    .bind(claims.organization_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "Report not found".to_string()))?;
 
     if report.user_id != claims.user_id && claims.role != "admin" {
-        return Err((StatusCode::FORBIDDEN, "You can only edit your own reports".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "You can only edit your own reports".to_string(),
+        ));
     }
 
     let updated_report = sqlx::query_as::<_, DailyReport>(
@@ -138,7 +147,8 @@ pub async fn update_report(
         "report",
         Some(updated_report.id),
         Some(json!({ "changes": changes }).to_string()),
-    ).await;
+    )
+    .await;
 
     Ok(Json(updated_report))
 }

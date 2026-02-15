@@ -1,12 +1,12 @@
+use crate::AppState;
+use crate::models::*;
 use axum::{
-    extract::{Query, State},
-    http::{header, HeaderMap, HeaderValue, StatusCode},
-    response::IntoResponse,
     Extension, Json,
+    extract::{Query, State},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
+    response::IntoResponse,
 };
 use sqlx::{Postgres, QueryBuilder};
-use crate::models::*;
-use crate::AppState;
 
 fn append_log_filters(
     query_builder: &mut QueryBuilder<Postgres>,
@@ -74,12 +74,7 @@ fn logs_to_csv(logs: &[ActivityLog]) -> String {
         let user = csv_escape(&log.user_name);
         let action = csv_escape(&log.action);
         let target_type = csv_escape(&log.target_type);
-        let target_id = csv_escape(
-            &log
-                .target_id
-                .map(|id| id.to_string())
-                .unwrap_or_default(),
-        );
+        let target_id = csv_escape(&log.target_id.map(|id| id.to_string()).unwrap_or_default());
         let details = csv_escape(log.details.as_deref().unwrap_or(""));
 
         csv.push_str(&format!(
