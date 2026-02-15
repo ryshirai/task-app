@@ -17,7 +17,7 @@ pub async fn seed_data(pool: &Pool<Postgres>) -> Result<(), sqlx::Error> {
         .unwrap_or_else(|| (1,));
 
     sqlx::query("INSERT INTO users (organization_id, name, username, password_hash, role) VALUES ($1, $2, $3, $4, $5) 
-                 ON CONFLICT (username) DO UPDATE SET password_hash = $4")
+                 ON CONFLICT (organization_id, username) DO UPDATE SET password_hash = $4")
         .bind(org_id.0)
         .bind("Administrator")
         .bind("admin")

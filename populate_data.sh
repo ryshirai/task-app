@@ -50,6 +50,8 @@ login_and_get_token() {
     -d "$payload" \
     "$API_URL/auth/login")
 
+  echo "Login Response for $username: $response"
+
   token=$(echo "$response" | jq -r '.token // empty')
   if [[ -z "$token" ]]; then
     echo "Login failed for '$username'. Response: $response"
@@ -87,6 +89,7 @@ create_user_attempt() {
     echo "User '$username' created."
   else
     echo "User '$username' create attempt returned HTTP $http_code (may already exist)."
+    echo "Response: $response"
   fi
 }
 
@@ -148,11 +151,9 @@ create_task_for_day() {
   create_payload=$(jq -nc \
     --argjson member_id "$member_id" \
     --arg title "$title" \
-    --arg start_at "$start_at" \
-    --arg end_at "$end_at" \
     --arg tag1 "$tag1" \
     --arg tag2 "$tag2" \
-    '{member_id: $member_id, title: $title, start_at: $start_at, end_at: $end_at, tags: [$tag1, $tag2]}')
+    '{member_id: $member_id, title: $title, tags: [$tag1, $tag2]}')
 
   create_response=$(curl -sS -X POST \
     -H "Content-Type: application/json" \
@@ -165,6 +166,20 @@ create_task_for_day() {
     echo "Task create failed for user '$username' on $day. Response: $create_response"
     return
   fi
+
+  # Add Time Log
+  log_payload=$(jq -nc \
+    --argjson user_id "$member_id" \
+    --argjson task_id "$task_id" \
+    --arg start_at "$start_at" \
+    --arg end_at "$end_at" \
+    '{user_id: $user_id, task_id: $task_id, start_at: $start_at, end_at: $end_at}')
+
+  curl -sS -X POST \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $token" \
+    -d "$log_payload" \
+    "$API_URL/tasks/time-logs" >/dev/null
 
   if [[ "$status" == "done" ]]; then
     update_payload=$(jq -nc \
