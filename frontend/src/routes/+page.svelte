@@ -6,12 +6,13 @@
   import ProfileModal from '$lib/components/ProfileModal.svelte';
   import Login from '$lib/components/Login.svelte';
   import { TaskWebSocketClient } from '$lib/websocket';
-  import { type User, type Task } from '$lib/types';
+  import { type User, type Task, type Notification as AppNotification, type PaginatedNotifications } from '$lib/types';
   import { auth, logout } from '$lib/auth';
   import { toLocalISOString } from '$lib/utils';
   import { upsertTask } from '$lib/taskUtils';
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
+  import { browser } from '$app/environment';
   import { page } from '$app/stores';
 
   let users: User[] = [];
@@ -28,9 +29,16 @@
   let selectedDate = new Date().toISOString().split('T')[0];
   let observedTaskIdParam: string | null = null;
   let deepLinkHandled = false;
+  let notifications: AppNotification[] = [];
+  let notificationsLoading = false;
+  let notificationsError: string | null = null;
+  let showNotifications = false;
+  let notificationPollInterval: ReturnType<typeof setInterval> | null = null;
+  let notificationMenu: HTMLDivElement | null = null;
 
   $: baseDate = new Date(selectedDate);
   $: taskIdParam = $page.url.searchParams.get('task_id');
+  $: unreadNotificationCount = notifications.filter(n => !n.is_read).length;
 
   $: if (taskIdParam !== observedTaskIdParam) {
     observedTaskIdParam = taskIdParam;
@@ -69,6 +77,103 @@
       }
     } finally {
       loading = false;
+    }
+  }
+
+  async function fetchNotifications(silent = false) {
+    if (!$auth.token) return;
+
+    if (!silent) notificationsLoading = true;
+
+    try {
+      const res = await fetch('http://localhost:3000/api/notifications?page=1&per_page=20', {
+        headers: { 'Authorization': `Bearer ${$auth.token}` }
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          logout();
+          return;
+        }
+        throw new Error(`Failed to fetch notifications: ${res.statusText}`);
+      }
+
+      const data: PaginatedNotifications = await res.json();
+      notifications = data.items;
+      notificationsError = null;
+    } catch (e) {
+      console.error('Failed to fetch notifications:', e);
+      if (!silent) {
+        notificationsError = '通知の取得に失敗しました。';
+      }
+    } finally {
+      notificationsLoading = false;
+    }
+  }
+
+  async function markNotificationAsRead(notificationId: number) {
+    if (!$auth.token) return;
+    try {
+      const res = await fetch(`http://localhost:3000/api/notifications/${notificationId}/read`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${$auth.token}` }
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          logout();
+          return;
+        }
+        throw new Error('Failed to mark notification as read');
+      }
+      notifications = notifications.map(n => n.id === notificationId ? { ...n, is_read: true } : n);
+    } catch (e) {
+      console.error('Error marking notification as read:', e);
+    }
+  }
+
+  async function markAllNotificationsAsRead() {
+    if (!$auth.token) return;
+    try {
+      const res = await fetch('http://localhost:3000/api/notifications/read-all', {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${$auth.token}` }
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          logout();
+          return;
+        }
+        throw new Error('Failed to mark all notifications as read');
+      }
+      notifications = notifications.map(n => ({ ...n, is_read: true }));
+    } catch (e) {
+      console.error('Error marking all notifications as read:', e);
+      alert('通知の更新に失敗しました。');
+    }
+  }
+
+  function getNotificationLink(notification: AppNotification): string | null {
+    if (!notification.target_id) return null;
+    if (notification.target_type === 'task') return `/?task_id=${notification.target_id}`;
+    if (notification.target_type === 'report') return `/reports/${notification.target_id}`;
+    return null;
+  }
+
+  async function handleNotificationClick(notification: AppNotification) {
+    if (!notification.is_read) {
+      await markNotificationAsRead(notification.id);
+    }
+    showNotifications = false;
+    const link = getNotificationLink(notification);
+    if (link) {
+      goto(link);
+    }
+  }
+
+  function handleDocumentClick(event: MouseEvent) {
+    if (!showNotifications || !notificationMenu) return;
+    if (!notificationMenu.contains(event.target as Node)) {
+      showNotifications = false;
     }
   }
 
@@ -114,9 +219,14 @@
   }
 
   onMount(() => {
+    if (browser) {
+      document.addEventListener('click', handleDocumentClick);
+    }
     if ($auth.token) {
         fetchUsers();
+        fetchNotifications();
         pollInterval = setInterval(() => fetchUsers(true), 30000);
+        notificationPollInterval = setInterval(() => fetchNotifications(true), 30000);
         connectTaskWebSocket();
     } else {
         loading = false;
@@ -124,14 +234,25 @@
   });
 
   onDestroy(() => {
+    if (browser) {
+      document.removeEventListener('click', handleDocumentClick);
+    }
     if (pollInterval) clearInterval(pollInterval);
+    if (notificationPollInterval) clearInterval(notificationPollInterval);
     disconnectTaskWebSocket();
   });
 
   $: if ($auth.token && !pollInterval) {
       fetchUsers();
+      fetchNotifications();
       pollInterval = setInterval(() => fetchUsers(true), 30000);
+      notificationPollInterval = setInterval(() => fetchNotifications(true), 30000);
       connectTaskWebSocket();
+  }
+
+  $: if ($auth.token && !notificationPollInterval) {
+      fetchNotifications(true);
+      notificationPollInterval = setInterval(() => fetchNotifications(true), 30000);
   }
 
   $: if (!$auth.token) {
@@ -139,6 +260,11 @@
         clearInterval(pollInterval);
         pollInterval = null;
       }
+      if (notificationPollInterval) {
+        clearInterval(notificationPollInterval);
+        notificationPollInterval = null;
+      }
+      notifications = [];
       disconnectTaskWebSocket();
   }
 
@@ -393,6 +519,60 @@
         </button>
 
         <div class="flex items-center gap-1">
+            <div class="relative" bind:this={notificationMenu}>
+              <button
+                on:click|stopPropagation={() => showNotifications = !showNotifications}
+                class="relative p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                title="通知"
+                aria-label="通知を開く"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5"></path><path d="M9 17a3 3 0 0 0 6 0"></path></svg>
+                {#if unreadNotificationCount > 0}
+                  <span class="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center">
+                    {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                  </span>
+                {/if}
+              </button>
+
+              {#if showNotifications}
+                <div class="absolute right-0 top-8 z-50 w-80 max-h-96 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
+                  <div class="flex items-center justify-between px-3 py-2 border-b border-slate-100">
+                    <h3 class="text-xs font-bold text-slate-700">通知</h3>
+                    <button
+                      on:click={markAllNotificationsAsRead}
+                      disabled={unreadNotificationCount === 0}
+                      class="text-[10px] font-bold text-blue-600 disabled:text-slate-300"
+                    >
+                      すべて既読
+                    </button>
+                  </div>
+
+                  <div class="max-h-80 overflow-y-auto">
+                    {#if notificationsLoading}
+                      <div class="px-3 py-4 text-[11px] text-slate-400">読み込み中...</div>
+                    {:else if notificationsError}
+                      <div class="px-3 py-4 text-[11px] text-red-500">{notificationsError}</div>
+                    {:else if notifications.length === 0}
+                      <div class="px-3 py-4 text-[11px] text-slate-400">通知はありません。</div>
+                    {:else}
+                      {#each notifications as notification (notification.id)}
+                        <button
+                          on:click={() => handleNotificationClick(notification)}
+                          class="w-full text-left px-3 py-2 border-b border-slate-100 hover:bg-slate-50 transition-colors {notification.is_read ? 'opacity-70' : 'bg-blue-50/50'}"
+                        >
+                          <div class="text-[11px] font-bold text-slate-800">{notification.title}</div>
+                          {#if notification.body}
+                            <div class="text-[10px] text-slate-500 mt-0.5 leading-snug">{notification.body}</div>
+                          {/if}
+                          <div class="text-[9px] text-slate-400 mt-1">{new Date(notification.created_at).toLocaleString('ja-JP')}</div>
+                        </button>
+                      {/each}
+                    {/if}
+                  </div>
+                </div>
+              {/if}
+            </div>
+
             <button on:click={() => showProfile = true} class="p-1 text-slate-400 hover:text-slate-600 transition-colors" title="プロフィール設定" aria-label="プロフィール設定を開く">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
             </button>

@@ -56,6 +56,26 @@ export interface Invitation {
     created_at: string;
 }
 
+export interface Notification {
+    id: number;
+    organization_id: number;
+    user_id: number;
+    title: string;
+    body?: string | null;
+    category: string;
+    target_type?: string | null;
+    target_id?: number | null;
+    is_read: boolean;
+    created_at: string;
+}
+
+export interface PaginatedNotifications {
+    items: Notification[];
+    total: number;
+    page: number;
+    total_pages: number;
+}
+
 export interface AuthState {
     token: string | null;
     user: User | null;

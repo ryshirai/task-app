@@ -1,19 +1,40 @@
+use crate::AppState;
+use crate::WsMessage;
+use crate::handlers::{log_activity, notify_user};
+use crate::models::*;
 use axum::{
+    Extension, Json,
     extract::{Path, State},
     http::StatusCode,
-    Json, Extension,
 };
-use crate::models::*;
-use crate::AppState;
-use crate::handlers::log_activity;
-use crate::WsMessage;
 use serde_json::json;
+
+async fn user_in_organization(
+    state: &AppState,
+    organization_id: i32,
+    user_id: i32,
+) -> Result<bool, (StatusCode, String)> {
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND organization_id = $2)",
+    )
+    .bind(user_id)
+    .bind(organization_id)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(exists)
+}
 
 pub async fn create_task(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Json(input): Json<CreateTaskInput>,
 ) -> Result<(StatusCode, Json<Task>), (StatusCode, String)> {
+    if !user_in_organization(&state, claims.organization_id, input.member_id).await? {
+        return Err((StatusCode::BAD_REQUEST, "Invalid member_id".to_string()));
+    }
+
     let task = sqlx::query_as::<_, Task>(
         "INSERT INTO tasks (organization_id, member_id, title, tags, start_at, end_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
     )
@@ -35,7 +56,23 @@ pub async fn create_task(
         "task",
         Some(task.id),
         Some(format!("Title: {}", task.title)),
-    ).await;
+    )
+    .await;
+
+    if task.member_id != claims.user_id {
+        let body = format!("A task was assigned to you: {}", task.title);
+        notify_user(
+            &state.pool,
+            claims.organization_id,
+            task.member_id,
+            "New task assignment",
+            Some(&body),
+            "task_assigned",
+            Some("task"),
+            Some(task.id),
+        )
+        .await;
+    }
 
     let _ = state.tx.send(WsMessage {
         organization_id: task.organization_id,
@@ -52,26 +89,33 @@ pub async fn update_task(
     Path(id): Path<i32>,
     Json(input): Json<UpdateTaskInput>,
 ) -> Result<Json<Task>, (StatusCode, String)> {
-    let current_task = sqlx::query_as::<_, Task>(
-        "SELECT * FROM tasks WHERE id = $1 AND organization_id = $2",
-    )
-    .bind(id)
-    .bind(claims.organization_id)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .ok_or((StatusCode::NOT_FOUND, "Task not found".to_string()))?;
+    let current_task =
+        sqlx::query_as::<_, Task>("SELECT * FROM tasks WHERE id = $1 AND organization_id = $2")
+            .bind(id)
+            .bind(claims.organization_id)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .ok_or((StatusCode::NOT_FOUND, "Task not found".to_string()))?;
+
+    if let Some(new_member_id) = input.member_id {
+        if !user_in_organization(&state, claims.organization_id, new_member_id).await? {
+            return Err((StatusCode::BAD_REQUEST, "Invalid member_id".to_string()));
+        }
+    }
 
     let task = sqlx::query_as::<_, Task>(
         "UPDATE tasks SET 
-            title = COALESCE($1, title),
-            status = COALESCE($2, status),
-            progress_rate = COALESCE($3, progress_rate),
-            tags = COALESCE($4, tags),
-            start_at = COALESCE($5, start_at),
-            end_at = COALESCE($6, end_at)
-        WHERE id = $7 AND organization_id = $8 RETURNING *",
+            member_id = COALESCE($1, member_id),
+            title = COALESCE($2, title),
+            status = COALESCE($3, status),
+            progress_rate = COALESCE($4, progress_rate),
+            tags = COALESCE($5, tags),
+            start_at = COALESCE($6, start_at),
+            end_at = COALESCE($7, end_at)
+        WHERE id = $8 AND organization_id = $9 RETURNING *",
     )
+    .bind(input.member_id)
     .bind(input.title)
     .bind(input.status)
     .bind(input.progress_rate)
@@ -88,8 +132,14 @@ pub async fn update_task(
     if current_task.title != task.title {
         changes.push(json!({ "field": "title", "old": &current_task.title, "new": &task.title }));
     }
+    if current_task.member_id != task.member_id {
+        changes.push(
+            json!({ "field": "member_id", "old": current_task.member_id, "new": task.member_id }),
+        );
+    }
     if current_task.status != task.status {
-        changes.push(json!({ "field": "status", "old": &current_task.status, "new": &task.status }));
+        changes
+            .push(json!({ "field": "status", "old": &current_task.status, "new": &task.status }));
     }
     if current_task.progress_rate != task.progress_rate {
         changes.push(json!({
@@ -102,10 +152,13 @@ pub async fn update_task(
         changes.push(json!({ "field": "tags", "old": &current_task.tags, "new": &task.tags }));
     }
     if current_task.start_at != task.start_at {
-        changes.push(json!({ "field": "start_at", "old": &current_task.start_at, "new": &task.start_at }));
+        changes.push(
+            json!({ "field": "start_at", "old": &current_task.start_at, "new": &task.start_at }),
+        );
     }
     if current_task.end_at != task.end_at {
-        changes.push(json!({ "field": "end_at", "old": &current_task.end_at, "new": &task.end_at }));
+        changes
+            .push(json!({ "field": "end_at", "old": &current_task.end_at, "new": &task.end_at }));
     }
 
     log_activity(
@@ -116,7 +169,23 @@ pub async fn update_task(
         "task",
         Some(task.id),
         Some(json!({ "changes": changes }).to_string()),
-    ).await;
+    )
+    .await;
+
+    if current_task.member_id != task.member_id && task.member_id != claims.user_id {
+        let body = format!("A task was reassigned to you: {}", task.title);
+        notify_user(
+            &state.pool,
+            claims.organization_id,
+            task.member_id,
+            "Task reassigned",
+            Some(&body),
+            "task_reassigned",
+            Some("task"),
+            Some(task.id),
+        )
+        .await;
+    }
 
     let _ = state.tx.send(WsMessage {
         organization_id: task.organization_id,
@@ -147,7 +216,8 @@ pub async fn delete_task(
         "task",
         Some(id),
         None,
-    ).await;
+    )
+    .await;
 
     let _ = state.tx.send(WsMessage {
         organization_id: claims.organization_id,

@@ -1,11 +1,11 @@
+use crate::AppState;
+use crate::models::*;
 use axum::{
+    Extension, Json,
     extract::{Path, State},
     http::StatusCode,
-    Json, Extension,
 };
 use chrono::Utc;
-use crate::models::*;
-use crate::AppState;
 
 pub async fn create_invitation(
     State(state): State<AppState>,
@@ -13,7 +13,10 @@ pub async fn create_invitation(
     Json(input): Json<CreateInvitationInput>,
 ) -> Result<(StatusCode, Json<Invitation>), (StatusCode, String)> {
     if claims.role != "admin" {
-        return Err((StatusCode::FORBIDDEN, "Only admins can create invitations".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only admins can create invitations".to_string(),
+        ));
     }
 
     let token = uuid::Uuid::new_v4().to_string();
@@ -26,7 +29,7 @@ pub async fn create_invitation(
             RETURNING *
         )
         SELECT i.*, o.name as org_name FROM inserted i
-        JOIN organizations o ON i.organization_id = o.id"
+        JOIN organizations o ON i.organization_id = o.id",
     )
     .bind(claims.organization_id)
     .bind(token)
@@ -46,14 +49,17 @@ pub async fn get_invitation(
     let invitation = sqlx::query_as::<_, Invitation>(
         "SELECT i.*, o.name as org_name FROM invitations i 
          JOIN organizations o ON i.organization_id = o.id 
-         WHERE i.token = $1 AND i.expires_at > $2"
+         WHERE i.token = $1 AND i.expires_at > $2",
     )
     .bind(token)
     .bind(Utc::now())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .ok_or((StatusCode::NOT_FOUND, "Invalid or expired invitation token".to_string()))?;
+    .ok_or((
+        StatusCode::NOT_FOUND,
+        "Invalid or expired invitation token".to_string(),
+    ))?;
 
     Ok(Json(invitation))
 }

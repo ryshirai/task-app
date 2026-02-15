@@ -1,17 +1,17 @@
-use axum::{
-    extract::{Path, State, Query},
-    http::StatusCode,
-    Json, Extension,
-};
-use chrono::Utc;
-use crate::models::*;
-use crate::utils::is_valid_username;
 use crate::AppState;
 use crate::handlers::log_activity;
+use crate::models::*;
+use crate::utils::is_valid_username;
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
+use axum::{
+    Extension, Json,
+    extract::{Path, Query, State},
+    http::StatusCode,
+};
+use chrono::Utc;
 
 pub async fn get_users(
     State(state): State<AppState>,
@@ -49,19 +49,30 @@ pub async fn update_password(
     Extension(claims): Extension<Claims>,
     Json(input): Json<UpdatePasswordInput>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let stored_hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1 AND organization_id = $2")
-        .bind(claims.user_id)
-        .bind(claims.organization_id)
-        .fetch_one(&state.pool)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let stored_hash: String = sqlx::query_scalar(
+        "SELECT password_hash FROM users WHERE id = $1 AND organization_id = $2",
+    )
+    .bind(claims.user_id)
+    .bind(claims.organization_id)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let parsed_hash = PasswordHash::new(&stored_hash)
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Invalid password hash in DB".to_string()))?;
-    
+    let parsed_hash = PasswordHash::new(&stored_hash).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Invalid password hash in DB".to_string(),
+        )
+    })?;
+
     Argon2::default()
         .verify_password(input.current_password.as_bytes(), &parsed_hash)
-        .map_err(|_| (StatusCode::UNAUTHORIZED, "Current password is incorrect".to_string()))?;
+        .map_err(|_| {
+            (
+                StatusCode::UNAUTHORIZED,
+                "Current password is incorrect".to_string(),
+            )
+        })?;
 
     let salt = SaltString::generate(&mut OsRng);
     let new_password_hash = Argon2::default()
@@ -85,7 +96,8 @@ pub async fn update_password(
         "user",
         Some(claims.user_id),
         None,
-    ).await;
+    )
+    .await;
 
     Ok(StatusCode::OK)
 }
@@ -96,7 +108,11 @@ pub async fn create_user(
     Json(input): Json<CreateUserInput>,
 ) -> Result<(StatusCode, Json<User>), (StatusCode, String)> {
     if !is_valid_username(&input.username) {
-        return Err((StatusCode::BAD_REQUEST, "Username must contain only alphanumeric characters, underscores, or hyphens".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Username must contain only alphanumeric characters, underscores, or hyphens"
+                .to_string(),
+        ));
     }
 
     let salt = SaltString::generate(&mut OsRng);

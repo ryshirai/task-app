@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc, NaiveDate};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, sqlx::FromRow, Clone, Debug)]
@@ -154,6 +154,7 @@ pub struct UpdatePasswordInput {
 
 #[derive(Deserialize)]
 pub struct UpdateTaskInput {
+    pub member_id: Option<i32>,
     pub title: Option<String>,
     pub status: Option<String>,
     pub progress_rate: Option<i32>,
@@ -192,6 +193,34 @@ pub struct LogQuery {
 #[derive(Serialize)]
 pub struct PaginatedLogs {
     pub items: Vec<ActivityLog>,
+    pub total: i64,
+    pub page: i64,
+    pub total_pages: i64,
+}
+
+#[derive(Serialize, Deserialize, sqlx::FromRow)]
+pub struct Notification {
+    pub id: i32,
+    pub organization_id: i32,
+    pub user_id: i32,
+    pub title: String,
+    pub body: Option<String>,
+    pub category: String,
+    pub target_type: Option<String>,
+    pub target_id: Option<i32>,
+    pub is_read: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Deserialize)]
+pub struct NotificationQuery {
+    pub page: Option<i64>,
+    pub per_page: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct PaginatedNotifications {
+    pub items: Vec<Notification>,
     pub total: i64,
     pub page: i64,
     pub total_pages: i64,
