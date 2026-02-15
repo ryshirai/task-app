@@ -11,6 +11,7 @@
   import { TaskWebSocketClient } from '$lib/websocket';
   import { type User, type Task } from '$lib/types';
   import { auth, logout } from '$lib/auth';
+  import { toLocalISOString } from '$lib/utils';
   import { onMount, onDestroy } from 'svelte';
 
   let users: User[] = [];
@@ -68,39 +69,44 @@
 
   type TaskDeletedPayload = { id: number };
 
+  function sortTasksByStartAt(tasks: Task[]): Task[] {
+    return [...tasks].sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
+  }
+
+  function upsertTask(task: Task) {
+    const previousOwner = users.find(u => u.tasks.some(t => t.id === task.id));
+
+    users = users.map(user => {
+      let nextTasks = user.tasks;
+      let changed = false;
+
+      if (previousOwner && previousOwner.id !== task.member_id && user.id === previousOwner.id) {
+        nextTasks = nextTasks.filter(t => t.id !== task.id);
+        changed = true;
+      }
+
+      if (user.id === task.member_id) {
+        const taskIndex = nextTasks.findIndex(t => t.id === task.id);
+        if (taskIndex !== -1) {
+          nextTasks = [...nextTasks];
+          nextTasks[taskIndex] = task;
+        } else {
+          nextTasks = [...nextTasks, task];
+        }
+        changed = true;
+      }
+
+      if (!changed) return user;
+      return { ...user, tasks: sortTasksByStartAt(nextTasks) };
+    });
+  }
+
   function applyTaskCreated(task: Task) {
-    const user = users.find(u => u.id === task.member_id);
-    if (!user) return;
-    if (user.tasks.some(t => t.id === task.id)) return;
-    user.tasks.push(task);
-    users = users;
+    upsertTask(task);
   }
 
   function applyTaskUpdated(task: Task) {
-    let changed = false;
-
-    const previousUser = users.find(u => u.tasks.some(t => t.id === task.id));
-    if (previousUser && previousUser.id !== task.member_id) {
-      const previousTaskIndex = previousUser.tasks.findIndex(t => t.id === task.id);
-      if (previousTaskIndex !== -1) {
-        previousUser.tasks.splice(previousTaskIndex, 1);
-        changed = true;
-      }
-    }
-
-    const currentUser = users.find(u => u.id === task.member_id);
-    if (!currentUser) {
-      if (changed) users = users;
-      return;
-    }
-
-    const currentTaskIndex = currentUser.tasks.findIndex(t => t.id === task.id);
-    if (currentTaskIndex !== -1) {
-      currentUser.tasks[currentTaskIndex] = task;
-    } else {
-      currentUser.tasks.push(task);
-    }
-    users = users;
+    upsertTask(task);
   }
 
   function applyTaskDeleted(payload: TaskDeletedPayload) {
@@ -174,8 +180,8 @@
       member_id,
       title,
       tags,
-      start_at: start.toISOString(),
-      end_at: end.toISOString()
+      start_at: toLocalISOString(start),
+      end_at: toLocalISOString(end)
     };
 
     try {
@@ -191,13 +197,7 @@
       if (!res.ok) throw new Error('Failed to create task');
 
       const createdTask = await res.json();
-
-      users = users.map(u => {
-        if (u.id === member_id) {
-          return { ...u, tasks: [...u.tasks, createdTask] };
-        }
-        return u;
-      });
+      upsertTask(createdTask);
     } catch (e) {
       console.error('Error creating task:', e);
       alert('タスクの作成に失敗しました。');
@@ -239,16 +239,7 @@
       if (!res.ok) throw new Error('Failed to update task');
       
       const savedTask = await res.json();
-      
-      users = users.map(u => {
-        if (u.id === savedTask.member_id) {
-          return {
-            ...u,
-            tasks: u.tasks.map(t => t.id === savedTask.id ? savedTask : t)
-          };
-        }
-        return u;
-      });
+      upsertTask(savedTask);
       editingTask = null;
     } catch (e) {
       console.error('Error updating task:', e);
@@ -341,6 +332,7 @@
                 selectedDate = d.toISOString().split('T')[0];
             }}
             class="p-1 hover:bg-white hover:shadow-sm rounded-md transition-all text-slate-500"
+            aria-label="前日へ移動"
         >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
         </button>
@@ -356,6 +348,7 @@
                 selectedDate = d.toISOString().split('T')[0];
             }}
             class="p-1 hover:bg-white hover:shadow-sm rounded-md transition-all text-slate-500"
+            aria-label="翌日へ移動"
         >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </button>
@@ -397,6 +390,7 @@
             on:click={() => showLogsModal = true}
             class="p-1 text-slate-400 hover:text-slate-600 transition-colors"
             title="操作履歴"
+            aria-label="操作履歴を開く"
         >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"></path><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"></path></svg>
         </button>
@@ -408,17 +402,17 @@
         </button>
 
         <div class="flex items-center gap-1">
-            <button on:click={() => showProfile = true} class="p-1 text-slate-400 hover:text-slate-600 transition-colors" title="プロフィール設定">
+            <button on:click={() => showProfile = true} class="p-1 text-slate-400 hover:text-slate-600 transition-colors" title="プロフィール設定" aria-label="プロフィール設定を開く">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
             </button>
 
             {#if $auth.user?.role === 'admin'}
-            <button on:click={() => showUserManagement = true} class="p-1 text-slate-400 hover:text-slate-600 transition-colors" title="ユーザー管理">
+            <button on:click={() => showUserManagement = true} class="p-1 text-slate-400 hover:text-slate-600 transition-colors" title="ユーザー管理" aria-label="ユーザー管理を開く">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
             </button>
             {/if}
 
-            <button on:click={logout} class="p-1 text-slate-400 hover:text-red-600 transition-colors" title="ログアウト">
+            <button on:click={logout} class="p-1 text-slate-400 hover:text-red-600 transition-colors" title="ログアウト" aria-label="ログアウト">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
             </button>
         </div>
