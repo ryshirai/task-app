@@ -34,12 +34,12 @@
        <NowLine {baseDate} showLabel={false} showDot={false} />
     </div>
 
-    <div class="overflow-y-auto flex-1">
+    <div class="overflow-y-auto flex-1 scrollbar-hide">
       {#each members as member (member.id)}
         <MemberRow 
           {member} 
           {baseDate}
-          on:createTask 
+          on:openTaskForm
           on:editTask 
           on:updateTask
         />

@@ -3,24 +3,16 @@
   import { type User } from '$lib/types';
   import TaskBar from './TaskBar.svelte';
   import InteractionLayer from './InteractionLayer.svelte';
-  import TaskForm from './TaskForm.svelte';
 
   export let member: User;
   export let baseDate: Date;
   const dispatch = createEventDispatcher();
 
-  let activeSelection: { start: Date; end: Date } | null = null;
-
   function handleSelect(event: CustomEvent<{ start: Date; end: Date }>) {
-    activeSelection = event.detail;
-  }
-
-  function handleSubmit(event: CustomEvent<{ title: string; tags: string[]; start: Date; end: Date }>) {
-    dispatch('createTask', {
+    dispatch('openTaskForm', {
       member_id: member.id,
       ...event.detail
     });
-    activeSelection = null;
   }
 
   // Workload calculation
@@ -89,13 +81,5 @@
 
     <InteractionLayer {baseDate} on:select={handleSelect} />
 
-    {#if activeSelection}
-      <TaskForm 
-        start={activeSelection.start} 
-        end={activeSelection.end} 
-        on:submit={handleSubmit}
-        on:cancel={() => activeSelection = null}
-      />
-    {/if}
   </div>
 </div>
