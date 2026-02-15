@@ -12,6 +12,7 @@
   import { type User, type Task } from '$lib/types';
   import { auth, logout } from '$lib/auth';
   import { toLocalISOString } from '$lib/utils';
+  import { upsertTask } from '$lib/taskUtils';
   import { onMount, onDestroy } from 'svelte';
 
   let users: User[] = [];
@@ -69,44 +70,12 @@
 
   type TaskDeletedPayload = { id: number };
 
-  function sortTasksByStartAt(tasks: Task[]): Task[] {
-    return [...tasks].sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
-  }
-
-  function upsertTask(task: Task) {
-    const previousOwner = users.find(u => u.tasks.some(t => t.id === task.id));
-
-    users = users.map(user => {
-      let nextTasks = user.tasks;
-      let changed = false;
-
-      if (previousOwner && previousOwner.id !== task.member_id && user.id === previousOwner.id) {
-        nextTasks = nextTasks.filter(t => t.id !== task.id);
-        changed = true;
-      }
-
-      if (user.id === task.member_id) {
-        const taskIndex = nextTasks.findIndex(t => t.id === task.id);
-        if (taskIndex !== -1) {
-          nextTasks = [...nextTasks];
-          nextTasks[taskIndex] = task;
-        } else {
-          nextTasks = [...nextTasks, task];
-        }
-        changed = true;
-      }
-
-      if (!changed) return user;
-      return { ...user, tasks: sortTasksByStartAt(nextTasks) };
-    });
-  }
-
   function applyTaskCreated(task: Task) {
-    upsertTask(task);
+    users = upsertTask(users, task);
   }
 
   function applyTaskUpdated(task: Task) {
-    upsertTask(task);
+    users = upsertTask(users, task);
   }
 
   function applyTaskDeleted(payload: TaskDeletedPayload) {
@@ -197,7 +166,7 @@
       if (!res.ok) throw new Error('Failed to create task');
 
       const createdTask = await res.json();
-      upsertTask(createdTask);
+      users = upsertTask(users, createdTask);
     } catch (e) {
       console.error('Error creating task:', e);
       alert('タスクの作成に失敗しました。');
@@ -239,7 +208,7 @@
       if (!res.ok) throw new Error('Failed to update task');
       
       const savedTask = await res.json();
-      upsertTask(savedTask);
+      users = upsertTask(users, savedTask);
       editingTask = null;
     } catch (e) {
       console.error('Error updating task:', e);
