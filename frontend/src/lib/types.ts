@@ -14,6 +14,10 @@ export interface Task {
     created_at: string; // ISO 8601 string
 }
 
+export interface TaskWithUser extends Task {
+    user_name: string;
+}
+
 export interface User {
     id: number;
     organization_id: number;

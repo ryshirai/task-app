@@ -27,6 +27,14 @@ pub struct Task {
 }
 
 #[derive(Serialize, Deserialize, sqlx::FromRow)]
+pub struct TaskWithUser {
+    #[serde(flatten)]
+    #[sqlx(flatten)]
+    pub task: Task,
+    pub user_name: String,
+}
+
+#[derive(Serialize, Deserialize, sqlx::FromRow)]
 pub struct ActivityLog {
     pub id: i32,
     pub organization_id: i32,
@@ -177,6 +185,14 @@ pub struct ReportQuery {
 #[derive(Deserialize)]
 pub struct GetUsersQuery {
     pub date: Option<NaiveDate>,
+}
+
+#[derive(Deserialize)]
+pub struct TaskReportQuery {
+    pub member_id: Option<i32>,
+    pub start_date: Option<NaiveDate>,
+    pub end_date: Option<NaiveDate>,
+    pub statuses: Option<String>,
 }
 
 #[derive(Deserialize)]

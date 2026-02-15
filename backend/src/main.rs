@@ -99,6 +99,16 @@ async fn main() {
     let task_routes = Router::new()
         .route("/", post(handlers::tasks::create_task))
         .route(
+            "/report",
+            get(handlers::tasks::get_task_report)
+                .layer(axum_middleware::from_fn(middleware::admin_only)),
+        )
+        .route(
+            "/report/export",
+            get(handlers::tasks::export_task_report)
+                .layer(axum_middleware::from_fn(middleware::admin_only)),
+        )
+        .route(
             "/{id}",
             axum::routing::patch(handlers::tasks::update_task).delete(handlers::tasks::delete_task),
         )
@@ -145,7 +155,10 @@ async fn main() {
         ));
 
     let analytics_routes = Router::new()
-        .route("/personal", get(handlers::analytics::get_personal_analytics))
+        .route(
+            "/personal",
+            get(handlers::analytics::get_personal_analytics),
+        )
         .route("/users/{id}", get(handlers::analytics::get_user_analytics))
         .layer(axum_middleware::from_fn_with_state(
             state.clone(),
