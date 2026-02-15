@@ -185,6 +185,8 @@ pub struct LogQuery {
     pub user_id: Option<i32>,
     pub start_date: Option<NaiveDate>,
     pub end_date: Option<NaiveDate>,
+    pub action: Option<String>,
+    pub target_type: Option<String>,
 }
 
 #[derive(Serialize)]

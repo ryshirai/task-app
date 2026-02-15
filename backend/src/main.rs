@@ -84,6 +84,7 @@ async fn main() {
         .layer(axum_middleware::from_fn_with_state(state.clone(), middleware::auth_middleware));
 
     let log_routes = Router::new()
+        .route("/export", get(handlers::logs::export_logs))
         .route("/", get(handlers::logs::get_logs))
         .layer(axum_middleware::from_fn_with_state(state.clone(), middleware::auth_middleware));
 
