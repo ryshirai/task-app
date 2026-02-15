@@ -225,3 +225,35 @@ pub struct PaginatedNotifications {
     pub page: i64,
     pub total_pages: i64,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct AnalyticsResponse {
+    pub task_stats: TaskStats,
+    pub report_stats: ReportStats,
+    pub heatmap: Vec<HeatmapDay>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct TaskStats {
+    pub total_completed: i64,
+    pub completed_this_week: i64,
+    pub completed_last_week: i64,
+    pub by_status: Vec<StatusCount>,
+}
+
+#[derive(Serialize, Deserialize, sqlx::FromRow)]
+pub struct StatusCount {
+    pub status: String,
+    pub count: i64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ReportStats {
+    pub total_submitted: i64,
+}
+
+#[derive(Serialize, Deserialize, sqlx::FromRow)]
+pub struct HeatmapDay {
+    pub date: NaiveDate,
+    pub count: i64,
+}
