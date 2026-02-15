@@ -1,11 +1,13 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { goto } from '$app/navigation';
   import { type User } from '$lib/types';
   import TaskBar from './TaskBar.svelte';
   import InteractionLayer from './InteractionLayer.svelte';
 
   export let member: User;
   export let baseDate: Date;
+  export let isAdmin = false;
   const dispatch = createEventDispatcher();
 
   function handleSelect(event: CustomEvent<{ start: Date; end: Date }>) {
@@ -52,7 +54,19 @@
       </div>
     {/if}
     <div class="flex flex-col min-w-0 flex-1">
-        <span class="font-bold text-slate-700 truncate text-[11px] leading-tight">{member.name}</span>
+        <div class="flex items-center gap-1 min-w-0">
+          <span class="font-bold text-slate-700 truncate text-[11px] leading-tight">{member.name}</span>
+          {#if isAdmin}
+            <button
+              on:click={() => goto(`/analytics?user_id=${member.id}`)}
+              class="shrink-0 p-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              title="分析を表示"
+              aria-label={`${member.name}の分析を表示`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>
+            </button>
+          {/if}
+        </div>
         <div class="flex items-center gap-1 mt-0.5">
             <span class="px-1 py-0.5 rounded-[3px] text-[7px] font-black uppercase border {loadConfig[loadLevel].color} transition-all duration-300">
                 {loadConfig[loadLevel].label}

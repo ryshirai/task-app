@@ -144,6 +144,14 @@ async fn main() {
             middleware::auth_middleware,
         ));
 
+    let analytics_routes = Router::new()
+        .route("/personal", get(handlers::analytics::get_personal_analytics))
+        .route("/users/{id}", get(handlers::analytics::get_user_analytics))
+        .layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            middleware::auth_middleware,
+        ));
+
     let app = Router::new()
         .route(
             "/ws",
@@ -159,6 +167,7 @@ async fn main() {
         .nest("/api/reports", report_routes)
         .nest("/api/logs", log_routes)
         .nest("/api/notifications", notification_routes)
+        .nest("/api/analytics", analytics_routes)
         .layer(CorsLayer::permissive())
         .with_state(state);
 

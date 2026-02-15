@@ -511,6 +511,14 @@
         >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"></path><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"></path></svg>
         </button>
+        <button
+            on:click={() => goto('/analytics')}
+            class="p-1 text-slate-400 hover:text-slate-600 transition-colors"
+            title="個人分析"
+            aria-label="個人分析を開く"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>
+        </button>
         <button 
             on:click={() => goto('/reports/new')}
             class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-all text-[10px] font-bold shadow-sm"
@@ -600,6 +608,7 @@
       <TimelineContainer 
         members={filteredUsers} 
         {baseDate}
+        isAdmin={$auth.user?.role === 'admin'}
         on:openTaskForm={handleOpenTaskForm}
         on:editTask={(e) => editingTask = e.detail}
         on:updateTask={(e) => handleUpdateTask(e)}

@@ -80,3 +80,31 @@ export interface AuthState {
     token: string | null;
     user: User | null;
 }
+
+export interface StatusCount {
+    status: string;
+    count: number;
+}
+
+export interface HeatmapDay {
+    date: string;
+    count: number;
+}
+
+export interface TaskStats {
+    total_completed: number;
+    completed_this_week: number;
+    completed_last_week: number;
+    by_status: StatusCount[];
+}
+
+export interface ReportStats {
+    total_submitted: number;
+}
+
+export interface PersonalAnalyticsResponse {
+    user_name: string;
+    task_stats: TaskStats;
+    report_stats: ReportStats;
+    heatmap: HeatmapDay[];
+}
