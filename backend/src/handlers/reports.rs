@@ -58,6 +58,9 @@ pub async fn update_report(
     Path(id): Path<i32>,
     Json(input): Json<UpdateReportInput>,
 ) -> Result<Json<DailyReport>, (StatusCode, String)> {
+    // 権限確認 (自身のレポートか、管理者であること)
+    // 完全に1クエリにまとめることも可能だが、ビジネスロジック（Admin権限）の可読性と
+    // 安全性のために、まず対象が存在し、かつ権限があるかを確認する
     let report = sqlx::query_as::<_, DailyReport>("SELECT * FROM daily_reports WHERE id = $1 AND organization_id = $2")
         .bind(id)
         .bind(claims.organization_id)
@@ -71,10 +74,11 @@ pub async fn update_report(
     }
 
     let updated_report = sqlx::query_as::<_, DailyReport>(
-        "UPDATE daily_reports SET content = $1 WHERE id = $2 RETURNING *",
+        "UPDATE daily_reports SET content = $1 WHERE id = $2 AND organization_id = $3 RETURNING *",
     )
     .bind(input.content)
     .bind(id)
+    .bind(claims.organization_id)
     .fetch_one(&state.pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;

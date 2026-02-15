@@ -49,8 +49,9 @@ pub async fn update_password(
     Extension(claims): Extension<Claims>,
     Json(input): Json<UpdatePasswordInput>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let stored_hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1")
+    let stored_hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1 AND organization_id = $2")
         .bind(claims.user_id)
+        .bind(claims.organization_id)
         .fetch_one(&state.pool)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -68,9 +69,10 @@ pub async fn update_password(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .to_string();
 
-    sqlx::query("UPDATE users SET password_hash = $1 WHERE id = $2")
+    sqlx::query("UPDATE users SET password_hash = $1 WHERE id = $2 AND organization_id = $3")
         .bind(new_password_hash)
         .bind(claims.user_id)
+        .bind(claims.organization_id)
         .execute(&state.pool)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
