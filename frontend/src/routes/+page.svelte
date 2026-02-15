@@ -5,11 +5,10 @@
   import UserManagementModal from '$lib/components/UserManagementModal.svelte';
   import ProfileModal from '$lib/components/ProfileModal.svelte';
   import Login from '$lib/components/Login.svelte';
-  import { TaskWebSocketClient } from '$lib/websocket';
-  import { type User, type Task, type Notification as AppNotification, type PaginatedNotifications } from '$lib/types';
+  import { type User, type TaskTimeLog, type Notification as AppNotification, type PaginatedNotifications } from '$lib/types';
   import { auth, logout } from '$lib/auth';
-  import { toLocalISOString } from '$lib/utils';
-  import { upsertTask } from '$lib/taskUtils';
+  import { toLocalISOString, getTodayJSTString, getJSTDateString, formatDateTime } from '$lib/utils';
+  import { upsertTimeLog } from '$lib/taskUtils';
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { browser } from '$app/environment';
@@ -18,15 +17,13 @@
   let users: User[] = [];
   let loading = true;
   let error: string | null = null;
-  let editingTask: Task | null = null;
+  let editingTask: TaskTimeLog | null = null;
   let showUserManagement = false;
   let showProfile = false;
   let taskFormSelection: { member_id: number; start: Date; end: Date } | null = null;
   let pollInterval: ReturnType<typeof setInterval> | null = null;
-  let taskWebSocketClient: TaskWebSocketClient | null = null;
-  let taskEventUnsubscribers: Array<() => void> = [];
   let filterText = '';
-  let selectedDate = new Date().toISOString().split('T')[0];
+  let selectedDate = getTodayJSTString();
   let observedTaskIdParam: string | null = null;
   let deepLinkHandled = false;
   let notifications: AppNotification[] = [];
@@ -36,7 +33,7 @@
   let notificationPollInterval: ReturnType<typeof setInterval> | null = null;
   let notificationMenu: HTMLDivElement | null = null;
 
-  $: baseDate = new Date(selectedDate);
+  $: baseDate = new Date(selectedDate + 'T00:00:00+09:00');
   $: taskIdParam = $page.url.searchParams.get('task_id');
   $: unreadNotificationCount = notifications.filter(n => !n.is_read).length;
 
@@ -47,9 +44,9 @@
 
   $: filteredUsers = users.map(u => ({
     ...u,
-    tasks: u.tasks.filter(t => 
-      t.title.toLowerCase().includes(filterText.toLowerCase()) ||
-      (t.tags || []).some(tag => tag.toLowerCase().includes(filterText.toLowerCase()))
+    time_logs: (u.time_logs || []).filter(t => 
+      (t.task_title || '').toLowerCase().includes(filterText.toLowerCase()) ||
+      (t.task_tags || []).some(tag => tag.toLowerCase().includes(filterText.toLowerCase()))
     )
   }));
 
@@ -177,45 +174,11 @@
     }
   }
 
-  type TaskDeletedPayload = { id: number };
-
-  function applyTaskCreated(task: Task) {
-    users = upsertTask(users, task);
-  }
-
-  function applyTaskUpdated(task: Task) {
-    users = upsertTask(users, task);
-  }
-
-  function applyTaskDeleted(payload: TaskDeletedPayload) {
-    for (const user of users) {
-      const taskIndex = user.tasks.findIndex(t => t.id === payload.id);
-      if (taskIndex !== -1) {
-        user.tasks.splice(taskIndex, 1);
-        users = users;
-        return;
-      }
-    }
-  }
-
-  function connectTaskWebSocket() {
-    if (!$auth.token || taskWebSocketClient) return;
-
-    const client = new TaskWebSocketClient($auth.token);
-    taskEventUnsubscribers = [
-      client.subscribe<Task>('task_created', (task: Task) => applyTaskCreated(task)),
-      client.subscribe<Task>('task_updated', (task: Task) => applyTaskUpdated(task)),
-      client.subscribe<TaskDeletedPayload>('task_deleted', (payload: TaskDeletedPayload) => applyTaskDeleted(payload))
-    ];
-    client.connect();
-    taskWebSocketClient = client;
-  }
-
-  function disconnectTaskWebSocket() {
-    taskEventUnsubscribers.forEach(unsubscribe => unsubscribe());
-    taskEventUnsubscribers = [];
-    taskWebSocketClient?.disconnect();
-    taskWebSocketClient = null;
+  function removeTimeLogById(timeLogId: number) {
+    users = users.map((user) => ({
+      ...user,
+      time_logs: (user.time_logs || []).filter((timeLog) => timeLog.id !== timeLogId)
+    }));
   }
 
   onMount(() => {
@@ -227,7 +190,6 @@
         fetchNotifications();
         pollInterval = setInterval(() => fetchUsers(true), 30000);
         notificationPollInterval = setInterval(() => fetchNotifications(true), 30000);
-        connectTaskWebSocket();
     } else {
         loading = false;
     }
@@ -239,7 +201,6 @@
     }
     if (pollInterval) clearInterval(pollInterval);
     if (notificationPollInterval) clearInterval(notificationPollInterval);
-    disconnectTaskWebSocket();
   });
 
   $: if ($auth.token && !pollInterval) {
@@ -247,7 +208,6 @@
       fetchNotifications();
       pollInterval = setInterval(() => fetchUsers(true), 30000);
       notificationPollInterval = setInterval(() => fetchNotifications(true), 30000);
-      connectTaskWebSocket();
   }
 
   $: if ($auth.token && !notificationPollInterval) {
@@ -265,7 +225,6 @@
         notificationPollInterval = null;
       }
       notifications = [];
-      disconnectTaskWebSocket();
   }
 
   $: if (selectedDate && $auth.token) {
@@ -277,9 +236,9 @@
     if (taskIdParam) {
       const taskId = Number(taskIdParam);
       if (Number.isInteger(taskId)) {
-        let deepLinkedTask: Task | undefined;
+        let deepLinkedTask: TaskTimeLog | undefined;
         for (const user of users) {
-          deepLinkedTask = user.tasks.find(task => task.id === taskId);
+          deepLinkedTask = (user.time_logs || []).find((timeLog) => timeLog.task_id === taskId);
           if (deepLinkedTask) break;
         }
 
@@ -293,16 +252,23 @@
   type CreateTaskPayload = { member_id: number; title: string; tags: string[]; start: Date; end: Date };
 
   async function createTask({ member_id, title, tags, start, end }: CreateTaskPayload) {
+    const existingTaskTimeLog = users
+      .find((user) => user.id === member_id)
+      ?.time_logs?.find(
+        (timeLog) => (timeLog.task_title || '').trim().toLowerCase() === title.trim().toLowerCase()
+      );
+
     const newTaskData = {
-      member_id,
-      title,
-      tags,
+      user_id: member_id,
+      task_id: existingTaskTimeLog?.task_id ?? null,
+      title: existingTaskTimeLog ? null : title,
+      tags: existingTaskTimeLog ? null : tags,
       start_at: toLocalISOString(start),
       end_at: toLocalISOString(end)
     };
 
     try {
-      const res = await fetch('http://localhost:3000/api/tasks', {
+      const res = await fetch('http://localhost:3000/api/tasks/time-logs', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -311,13 +277,15 @@
         body: JSON.stringify(newTaskData)
       });
 
-      if (!res.ok) throw new Error('Failed to create task');
+      if (!res.ok) throw new Error('Failed to create time log');
 
       const createdTask = await res.json();
-      users = upsertTask(users, createdTask);
+      if (getJSTDateString(new Date(createdTask.start_at)) === selectedDate) {
+        users = upsertTimeLog(users, createdTask);
+      }
     } catch (e) {
       console.error('Error creating task:', e);
-      alert('タスクの作成に失敗しました。');
+      alert('作業ログの作成に失敗しました。');
     } finally {
       taskFormSelection = null;
     }
@@ -335,53 +303,51 @@
     });
   }
 
-  async function handleUpdateTask(event: CustomEvent<Task>) {
+  async function handleUpdateTask(event: CustomEvent<TaskTimeLog>) {
     const updatedTask = event.detail;
     try {
-      const res = await fetch(`http://localhost:3000/api/tasks/${updatedTask.id}`, {
+      const res = await fetch(`http://localhost:3000/api/tasks/time-logs/${updatedTask.id}`, {
         method: 'PATCH',
         headers: { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${$auth.token}`
         },
         body: JSON.stringify({
-          title: updatedTask.title,
-          status: updatedTask.status,
-          progress_rate: updatedTask.progress_rate,
           start_at: updatedTask.start_at,
           end_at: updatedTask.end_at
         })
       });
 
-      if (!res.ok) throw new Error('Failed to update task');
+      if (!res.ok) throw new Error('Failed to update time log');
       
       const savedTask = await res.json();
-      users = upsertTask(users, savedTask);
+      if (getJSTDateString(new Date(savedTask.start_at)) === selectedDate) {
+        users = upsertTimeLog(users, savedTask);
+      } else {
+        removeTimeLogById(savedTask.id);
+      }
       editingTask = null;
     } catch (e) {
       console.error('Error updating task:', e);
-      alert('タスクの更新に失敗しました。');
+      alert('作業ログの更新に失敗しました。');
     }
   }
 
   async function handleDeleteTask(event: CustomEvent<number>) {
     const taskId = event.detail;
     try {
-      const res = await fetch(`http://localhost:3000/api/tasks/${taskId}`, {
+      const res = await fetch(`http://localhost:3000/api/tasks/time-logs/${taskId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
 
-      if (!res.ok) throw new Error('Failed to delete task');
+      if (!res.ok) throw new Error('Failed to delete time log');
       
-      users = users.map(u => ({
-        ...u,
-        tasks: u.tasks.filter(t => t.id !== taskId)
-      }));
+      removeTimeLogById(taskId);
       editingTask = null;
     } catch (e) {
       console.error('Error deleting task:', e);
-      alert('タスクの削除に失敗しました。');
+      alert('作業ログの削除に失敗しました。');
     }
   }
 
@@ -398,7 +364,7 @@
       });
       if (!res.ok) throw new Error('Failed to create user');
       const newUser = await res.json();
-      users = [...users, { ...newUser, tasks: [] }];
+      users = [...users, { ...newUser, time_logs: [] }];
     } catch (e) {
       console.error(e);
       alert('ユーザーの追加に失敗しました。');
@@ -420,11 +386,6 @@
     }
   }
 
-  function getMyTasks(): Task[] {
-      if (!$auth.user) return [];
-      const me = users.find(u => u.id === $auth.user?.id);
-      return me ? me.tasks : [];
-  }
 </script>
 
 {#if !$auth.token}
@@ -626,7 +587,7 @@
 
   {#if editingTask}
     <TaskEditModal 
-      task={editingTask} 
+      timeLog={editingTask} 
       on:close={() => editingTask = null}
       on:save={handleUpdateTask}
       on:delete={handleDeleteTask}
@@ -637,6 +598,7 @@
     <TaskForm
       start={taskFormSelection.start}
       end={taskFormSelection.end}
+      existingTasks={users.find(u => u.id === taskFormSelection?.member_id)?.time_logs?.map(l => l.task_title).filter((v, i, a) => v && a.indexOf(v) === i) || []}
       on:submit={handleTaskFormSubmit}
       on:cancel={() => taskFormSelection = null}
     />

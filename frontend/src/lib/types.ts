@@ -12,10 +12,27 @@ export interface Task {
     start_at: string; // ISO 8601 string
     end_at: string;   // ISO 8601 string
     created_at: string; // ISO 8601 string
+    total_duration_minutes: number;
 }
 
-export interface TaskWithUser extends Task {
+export interface TaskTimeLog {
+    id: number;
+    organization_id: number;
+    user_id: number;
+    task_id: number;
+    start_at: string;
+    end_at: string;
+    duration_minutes: number;
+    task_title?: string;
+    task_status?: TaskStatus;
+    task_progress_rate?: number;
+    task_tags?: string[];
+    total_duration_minutes?: number;
+}
+
+export interface TaskReportRow extends Task {
     user_name: string;
+    total_duration_minutes: number;
 }
 
 export interface User {
@@ -26,7 +43,7 @@ export interface User {
     email?: string;
     avatar_url?: string;
     role: UserRole;
-    tasks: Task[];
+    time_logs?: TaskTimeLog[];
 }
 
 export interface ActivityLog {

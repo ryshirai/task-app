@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { auth } from '$lib/auth';
-  import type { TaskWithUser, User } from '$lib/types';
+  import type { TaskReportRow, User } from '$lib/types';
 
   const statusOptions = [
     { value: 'todo', label: '未着手' },
@@ -11,7 +11,7 @@
   ];
 
   let users: User[] = [];
-  let tasks: TaskWithUser[] = [];
+  let tasks: TaskReportRow[] = [];
   let loading = true;
   let exporting = false;
   let errorMessage = '';
@@ -77,6 +77,10 @@
 
   function formatDateTime(iso: string): string {
     return new Date(iso).toLocaleString('ja-JP');
+  }
+
+  function toHours(totalDurationMinutes: number): string {
+    return (totalDurationMinutes / 60).toFixed(2);
   }
 
   async function exportCsv() {
@@ -230,6 +234,7 @@
                 <th class="px-3 py-2 text-left font-bold text-slate-600">タグ</th>
                 <th class="px-3 py-2 text-left font-bold text-slate-600">開始</th>
                 <th class="px-3 py-2 text-left font-bold text-slate-600">終了</th>
+                <th class="px-3 py-2 text-left font-bold text-slate-600">Total Hours</th>
               </tr>
             </thead>
             <tbody>
@@ -242,6 +247,7 @@
                   <td class="px-3 py-2 text-slate-700">{task.tags?.join(', ') || '-'}</td>
                   <td class="px-3 py-2 text-slate-700 whitespace-nowrap">{formatDateTime(task.start_at)}</td>
                   <td class="px-3 py-2 text-slate-700 whitespace-nowrap">{formatDateTime(task.end_at)}</td>
+                  <td class="px-3 py-2 text-slate-700 whitespace-nowrap">{toHours(task.total_duration_minutes)}</td>
                 </tr>
               {/each}
             </tbody>

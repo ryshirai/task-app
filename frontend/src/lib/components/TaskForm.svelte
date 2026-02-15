@@ -4,6 +4,7 @@
 
   export let start: Date;
   export let end: Date;
+  export let existingTasks: string[] = [];
 
   const dispatch = createEventDispatcher();
   let title = '';
@@ -65,8 +66,14 @@
         bind:value={title}
         on:keydown={handleKeydown}
         placeholder="タスク名..."
+        list="task-suggestions"
         class="w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
       />
+      <datalist id="task-suggestions">
+        {#each existingTasks as taskTitle}
+          <option value={taskTitle} />
+        {/each}
+      </datalist>
       <input
         bind:value={tagsInput}
         on:keydown={handleKeydown}

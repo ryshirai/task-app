@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { auth } from '$lib/auth';
-  import type { Task } from '$lib/types';
+  import type { Task, TaskTimeLog } from '$lib/types';
   import { goto } from '$app/navigation';
   import ReportPreview from '$lib/components/ReportPreview.svelte';
 
@@ -21,7 +21,24 @@
         const users = await res.json();
         const me = users.find((u: any) => u.id === $auth.user?.id);
         if (me) {
-            userTasks = me.tasks;
+            const logs: TaskTimeLog[] = me.time_logs || [];
+            const taskMap = new Map<number, Task>();
+            for (const log of logs) {
+              if (taskMap.has(log.task_id)) continue;
+              taskMap.set(log.task_id, {
+                id: log.task_id,
+                organization_id: log.organization_id,
+                member_id: log.user_id,
+                title: log.task_title || `Task #${log.task_id}`,
+                status: log.task_status || 'todo',
+                progress_rate: log.task_progress_rate ?? 0,
+                tags: log.task_tags || [],
+                start_at: log.start_at,
+                end_at: log.end_at,
+                created_at: log.start_at
+              });
+            }
+            userTasks = Array.from(taskMap.values());
             generateTemplate();
         }
       }

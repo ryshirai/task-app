@@ -17,8 +17,11 @@ pub async fn get_users(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Query(params): Query<GetUsersQuery>,
-) -> Result<Json<Vec<UserWithTasks>>, (StatusCode, String)> {
-    let date = params.date.unwrap_or_else(|| Utc::now().naive_utc().date());
+) -> Result<Json<Vec<UserWithTimeLogs>>, (StatusCode, String)> {
+    let date = params.date.unwrap_or_else(|| {
+        let offset = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
+        Utc::now().with_timezone(&offset).date_naive()
+    });
 
     let users = sqlx::query_as::<_, User>("SELECT id, organization_id, name, username, email, avatar_url, role FROM users WHERE organization_id = $1 ORDER BY id")
         .bind(claims.organization_id)
@@ -28,8 +31,19 @@ pub async fn get_users(
 
     let mut result = Vec::new();
     for user in users {
-        let tasks = sqlx::query_as::<_, Task>(
-            "SELECT * FROM tasks WHERE organization_id = $1 AND member_id = $2 AND start_at::date = $3"
+        let time_logs = sqlx::query_as::<_, TaskTimeLog>(
+            "SELECT l.id, l.organization_id, l.user_id, l.task_id, l.start_at, l.end_at, l.duration_minutes::BIGINT AS duration_minutes,
+                    t.title AS task_title, t.status AS task_status, t.progress_rate AS task_progress_rate, t.tags AS task_tags,
+                    COALESCE(sums.total, 0)::BIGINT AS total_duration_minutes
+             FROM task_time_logs l
+             JOIN tasks t ON t.id = l.task_id AND t.organization_id = l.organization_id
+             LEFT JOIN (
+                 SELECT task_id, SUM(duration_minutes) as total 
+                 FROM task_time_logs 
+                 GROUP BY task_id
+             ) sums ON sums.task_id = l.task_id
+             WHERE l.organization_id = $1 AND l.user_id = $2 AND (l.start_at AT TIME ZONE 'Asia/Tokyo')::date = $3
+             ORDER BY l.start_at ASC, l.id ASC"
         )
             .bind(claims.organization_id)
             .bind(user.id)
@@ -38,7 +52,7 @@ pub async fn get_users(
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-        result.push(UserWithTasks { user, tasks });
+        result.push(UserWithTimeLogs { user, time_logs });
     }
 
     Ok(Json(result))

@@ -98,6 +98,12 @@ async fn main() {
 
     let task_routes = Router::new()
         .route("/", post(handlers::tasks::create_task))
+        .route("/time-logs", post(handlers::tasks::add_time_log))
+        .route(
+            "/time-logs/{id}",
+            axum::routing::patch(handlers::tasks::update_time_log)
+                .delete(handlers::tasks::delete_time_log),
+        )
         .route(
             "/report",
             get(handlers::tasks::get_task_report)

@@ -1,76 +1,90 @@
 import { describe, expect, it } from 'vitest';
-import { upsertTask } from './taskUtils';
-import type { Task, User } from './types';
+import { upsertTimeLog } from './taskUtils';
+import type { TaskTimeLog, User } from './types';
 
-function makeTask(overrides: Partial<Task> = {}): Task {
+function makeTimeLog(overrides: Partial<TaskTimeLog> = {}): TaskTimeLog {
   return {
     id: 1,
     organization_id: 10,
-    member_id: 100,
-    title: 'Task',
-    status: 'todo',
-    progress_rate: 0,
-    tags: [],
+    user_id: 100,
+    task_id: 900,
     start_at: '2026-02-15T09:00:00.000+00:00',
     end_at: '2026-02-15T10:00:00.000+00:00',
-    created_at: '2026-02-15T08:00:00.000+00:00',
+    duration_minutes: 60,
+    task_title: 'Task',
+    task_status: 'todo',
+    task_progress_rate: 0,
+    task_tags: [],
     ...overrides
   };
 }
 
-function makeUser(id: number, tasks: Task[] = []): User {
+function makeUser(id: number, timeLogs: TaskTimeLog[] = []): User {
   return {
     id,
     organization_id: 10,
     name: `User ${id}`,
     username: `user${id}`,
     role: 'user',
-    tasks
+    time_logs: timeLogs
   };
 }
 
-describe('upsertTask', () => {
-  it('adds a new task to the target member', () => {
+describe('upsertTimeLog', () => {
+  it('adds a new time log to the target member', () => {
     const users = [makeUser(100), makeUser(200)];
-    const newTask = makeTask({ id: 101, member_id: 100 });
+    const newTimeLog = makeTimeLog({ id: 101, user_id: 100 });
 
-    const nextUsers = upsertTask(users, newTask);
+    const nextUsers = upsertTimeLog(users, newTimeLog);
 
-    expect(nextUsers[0].tasks).toHaveLength(1);
-    expect(nextUsers[0].tasks[0].id).toBe(101);
-    expect(nextUsers[1].tasks).toHaveLength(0);
+    expect(nextUsers[0].time_logs).toHaveLength(1);
+    expect(nextUsers[0].time_logs![0].id).toBe(101);
+    expect(nextUsers[1].time_logs).toHaveLength(0);
   });
 
-  it('updates an existing task in-place for the same member', () => {
-    const existingTask = makeTask({ id: 42, title: 'Before', member_id: 100 });
-    const users = [makeUser(100, [existingTask]), makeUser(200)];
-    const updatedTask = makeTask({ id: 42, title: 'After', member_id: 100, progress_rate: 80 });
+  it('updates an existing time log in-place for the same member', () => {
+    const existingTimeLog = makeTimeLog({ id: 42, task_title: 'Before', user_id: 100 });
+    const users = [makeUser(100, [existingTimeLog]), makeUser(200)];
+    const updatedTimeLog = makeTimeLog({
+      id: 42,
+      task_title: 'After',
+      user_id: 100,
+      task_progress_rate: 80
+    });
 
-    const nextUsers = upsertTask(users, updatedTask);
+    const nextUsers = upsertTimeLog(users, updatedTimeLog);
 
-    expect(nextUsers[0].tasks).toHaveLength(1);
-    expect(nextUsers[0].tasks[0].title).toBe('After');
-    expect(nextUsers[0].tasks[0].progress_rate).toBe(80);
+    expect(nextUsers[0].time_logs).toHaveLength(1);
+    expect(nextUsers[0].time_logs![0].task_title).toBe('After');
+    expect(nextUsers[0].time_logs![0].task_progress_rate).toBe(80);
   });
 
-  it('moves a task from one member to another', () => {
-    const movedTask = makeTask({ id: 77, member_id: 200 });
-    const users = [makeUser(100, [makeTask({ id: 77, member_id: 100 })]), makeUser(200)];
+  it('moves a time log from one member to another', () => {
+    const movedTimeLog = makeTimeLog({ id: 77, user_id: 200 });
+    const users = [makeUser(100, [makeTimeLog({ id: 77, user_id: 100 })]), makeUser(200)];
 
-    const nextUsers = upsertTask(users, movedTask);
+    const nextUsers = upsertTimeLog(users, movedTimeLog);
 
-    expect(nextUsers[0].tasks).toHaveLength(0);
-    expect(nextUsers[1].tasks).toHaveLength(1);
-    expect(nextUsers[1].tasks[0].member_id).toBe(200);
+    expect(nextUsers[0].time_logs).toHaveLength(0);
+    expect(nextUsers[1].time_logs).toHaveLength(1);
+    expect(nextUsers[1].time_logs![0].user_id).toBe(200);
   });
 
-  it('always sorts member tasks by start_at ascending', () => {
-    const lateTask = makeTask({ id: 2, member_id: 100, start_at: '2026-02-15T11:00:00.000+00:00' });
-    const earlyTask = makeTask({ id: 3, member_id: 100, start_at: '2026-02-15T09:30:00.000+00:00' });
-    const users = [makeUser(100, [lateTask]), makeUser(200)];
+  it('always sorts member time logs by start_at ascending', () => {
+    const lateTimeLog = makeTimeLog({
+      id: 2,
+      user_id: 100,
+      start_at: '2026-02-15T11:00:00.000+00:00'
+    });
+    const earlyTimeLog = makeTimeLog({
+      id: 3,
+      user_id: 100,
+      start_at: '2026-02-15T09:30:00.000+00:00'
+    });
+    const users = [makeUser(100, [lateTimeLog]), makeUser(200)];
 
-    const nextUsers = upsertTask(users, earlyTask);
+    const nextUsers = upsertTimeLog(users, earlyTimeLog);
 
-    expect(nextUsers[0].tasks.map((task) => task.id)).toEqual([3, 2]);
+    expect(nextUsers[0].time_logs!.map((timeLog) => timeLog.id)).toEqual([3, 2]);
   });
 });

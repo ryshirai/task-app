@@ -34,13 +34,13 @@ async fn fetch_user_analytics(
             COUNT(*) FILTER (WHERE status = 'done') AS total_completed,
             COUNT(*) FILTER (
                 WHERE status = 'done'
-                  AND end_at >= date_trunc('week', NOW())
-                  AND end_at < date_trunc('week', NOW()) + interval '1 week'
+                  AND end_at >= date_trunc('week', NOW() AT TIME ZONE 'Asia/Tokyo')
+                  AND end_at < date_trunc('week', NOW() AT TIME ZONE 'Asia/Tokyo') + interval '1 week'
             ) AS completed_this_week,
             COUNT(*) FILTER (
                 WHERE status = 'done'
-                  AND end_at >= date_trunc('week', NOW()) - interval '1 week'
-                  AND end_at < date_trunc('week', NOW())
+                  AND end_at >= date_trunc('week', NOW() AT TIME ZONE 'Asia/Tokyo') - interval '1 week'
+                  AND end_at < date_trunc('week', NOW() AT TIME ZONE 'Asia/Tokyo')
             ) AS completed_last_week
          FROM tasks
          WHERE organization_id = $1 AND member_id = $2",
@@ -80,14 +80,14 @@ async fn fetch_user_analytics(
             gs.day::date AS date,
             COALESCE(COUNT(al.id), 0)::BIGINT AS count
          FROM generate_series(
-                CURRENT_DATE - interval '29 days',
-                CURRENT_DATE,
+                (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Tokyo')::date - interval '29 days',
+                (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Tokyo')::date,
                 interval '1 day'
          ) AS gs(day)
          LEFT JOIN activity_logs al
            ON al.organization_id = $1
           AND al.user_id = $2
-          AND al.created_at::date = gs.day::date
+          AND (al.created_at AT TIME ZONE 'Asia/Tokyo')::date = gs.day::date
          GROUP BY gs.day
          ORDER BY gs.day",
     )
