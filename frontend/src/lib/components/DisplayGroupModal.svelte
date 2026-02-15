@@ -115,7 +115,7 @@
       </button>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-6">
+    <div class="flex-1 overflow-y-auto p-6 pb-24">
       {#if showForm}
         <div class="space-y-6 animate-in slide-in-from-top-2 duration-200">
           <div>
@@ -146,21 +146,22 @@
               {/each}
             </div>
           </div>
+        </div>
 
-          <div class="flex gap-2 pt-4">
-            <button
-              on:click={handleSave}
-              class="flex-1 bg-slate-900 text-white py-2.5 rounded-xl text-[11px] font-black hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 active:scale-95"
-            >
-              {editingGroupId ? '更新する' : '作成する'}
-            </button>
-            <button
-              on:click={resetForm}
-              class="px-4 py-2.5 rounded-xl text-[11px] font-bold text-slate-500 hover:bg-slate-50 transition-all"
-            >
-              キャンセル
-            </button>
-          </div>
+        <!-- Fixed Footer for Form Actions -->
+        <div class="absolute bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-md border-t border-slate-100 flex gap-2">
+          <button
+            on:click={handleSave}
+            class="flex-1 bg-slate-900 text-white py-3 rounded-xl text-[11px] font-black hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 active:scale-95"
+          >
+            {editingGroupId ? '更新する' : '作成する'}
+          </button>
+          <button
+            on:click={resetForm}
+            class="px-6 py-3 rounded-xl text-[11px] font-bold text-slate-500 hover:bg-slate-50 transition-all"
+          >
+            キャンセル
+          </button>
         </div>
       {:else}
         <div class="space-y-4">

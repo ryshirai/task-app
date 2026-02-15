@@ -466,26 +466,6 @@
         </button>
       </div>
 
-      <!-- Display Group Selector -->
-      <div class="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200 ml-1">
-        <select 
-          bind:value={selectedGroupId}
-          class="bg-transparent border-none text-[11px] font-bold text-slate-700 outline-none px-2 cursor-pointer w-28"
-        >
-          <option value={null}>全員表示</option>
-          {#each displayGroups as group}
-            <option value={group.id}>{group.name}</option>
-          {/each}
-        </select>
-        <button 
-          on:click={() => showDisplayGroupSettings = true}
-          class="p-1 hover:bg-white hover:shadow-sm rounded-md transition-all text-slate-400 hover:text-slate-600"
-          title="グループ設定"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-        </button>
-      </div>
-
       <div class="relative group">
         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
         <input 
@@ -663,6 +643,37 @@
   </header>
 
   <main class="flex-1 min-h-0 flex flex-col p-1 overflow-hidden">
+    <!-- Sub Header: Group Selector -->
+    <div class="px-2 py-1.5 flex items-center gap-2 mb-1">
+      <div class="flex items-center bg-slate-100/80 p-1 rounded-xl border border-slate-200/60 shadow-sm">
+        <button 
+          on:click={() => selectedGroupId = null}
+          class="px-3 py-1 text-[10px] font-black uppercase tracking-tight rounded-lg transition-all {selectedGroupId === null ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}"
+        >
+          全員
+        </button>
+        {#each displayGroups as group}
+          <button 
+            on:click={() => selectedGroupId = group.id}
+            class="px-3 py-1 text-[10px] font-black uppercase tracking-tight rounded-lg transition-all {selectedGroupId === group.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}"
+          >
+            {group.name}
+          </button>
+        {/each}
+        <div class="w-px h-3 bg-slate-200 mx-1"></div>
+        <button 
+          on:click={() => showDisplayGroupSettings = true}
+          class="p-1 text-slate-400 hover:text-slate-600 hover:bg-white rounded-lg transition-all"
+          title="グループ設定を編集"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+      <div class="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-auto px-2">
+        {filteredUsers.length} members visible
+      </div>
+    </div>
+
     {#if loading}
       <div class="flex-1 flex items-center justify-center text-slate-400 font-bold animate-pulse">ダッシュボードを読み込み中...</div>
     {:else if error}
