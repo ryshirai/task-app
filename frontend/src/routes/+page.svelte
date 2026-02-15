@@ -12,6 +12,7 @@
   import { upsertTask } from '$lib/taskUtils';
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
+  import { browser } from '$app/environment';
   import { page } from '$app/stores';
 
   let users: User[] = [];
@@ -218,7 +219,9 @@
   }
 
   onMount(() => {
-    document.addEventListener('click', handleDocumentClick);
+    if (browser) {
+      document.addEventListener('click', handleDocumentClick);
+    }
     if ($auth.token) {
         fetchUsers();
         fetchNotifications();
@@ -231,7 +234,9 @@
   });
 
   onDestroy(() => {
-    document.removeEventListener('click', handleDocumentClick);
+    if (browser) {
+      document.removeEventListener('click', handleDocumentClick);
+    }
     if (pollInterval) clearInterval(pollInterval);
     if (notificationPollInterval) clearInterval(notificationPollInterval);
     disconnectTaskWebSocket();
