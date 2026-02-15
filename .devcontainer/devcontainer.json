@@ -24,5 +24,7 @@
         "version": "latest"
       }
   },
-  "postCreateCommand": "bash -lc 'corepack enable && (cd frontend && [ -f package.json ] && pnpm -v >/dev/null 2>&1 || true)'"
-}
+    "postCreateCommand": "bash -lc 'corepack enable && (cd frontend && [ -f package.json ] && pnpm -v >/dev/null 2>&1 || true)'",
+    "forwardPorts": [3000, 5173, 5432]
+  }
+  

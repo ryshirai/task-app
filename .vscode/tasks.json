@@ -10,6 +10,40 @@
         "reveal": "always",
         "panel": "dedicated"
       }
+    },
+    {
+        "label": "Glance: Start Backend (Rust)",
+        "type": "shell",
+        "command": "cd backend && cargo run",
+        "group": "active",
+        "problemMatcher": ["$rustc"],
+        "dependsOn": ["Glance: Start DB (Docker)"],
+        "presentation": {
+            "group": "server"
+        }
+    },
+    {
+        "label": "Glance: Start Frontend (Svelte)",
+        "type": "shell",
+        "command": "cd frontend && npm run dev",
+        "group": "active",
+        "problemMatcher": [],
+        "presentation": {
+            "group": "server"
+        }
+    },
+    {
+        "label": "🚀 Glance: Start Everything",
+        "dependsAllProjects": true,
+        "dependsOn": [
+            "Glance: Start Backend (Rust)",
+            "Glance: Start Frontend (Svelte)"
+        ],
+        "group": {
+            "kind": "build",
+            "isDefault": true
+        },
+        "problemMatcher": []
     }
   ]
 }

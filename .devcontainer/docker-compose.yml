@@ -5,10 +5,14 @@ services:
       dockerfile: .devcontainer/Dockerfile
       target: dev
       args:
-        # .envがあればその値を、なければデフォルト1000を使う
         - USER_UID=${LOCAL_UID:-1000}
         - USER_GID=${LOCAL_GID:-1000}
     container_name: task-app-dev
+    networks:
+      - glance-net
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - ..:/workspace:cached
       - dev-cargo:/home/vscode/.cargo
@@ -18,6 +22,10 @@ services:
     working_dir: /workspace
     environment:
       - RUST_BACKTRACE=1
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/task_app
+    ports:
+      - "3000:3000"
+      - "5173:5173"
     command: sleep infinity
 
   ai:
@@ -26,13 +34,13 @@ services:
       dockerfile: .devcontainer/Dockerfile
       target: ai
       args:
-        # .envがあればその値を、なければデフォルト1000を使う
         - USER_UID=${LOCAL_UID:-1000}
         - USER_GID=${LOCAL_GID:-1000}
     container_name: task-app-ai
+    networks:
+      - glance-net
     volumes:
       - ..:/workspace:cached
-      # AIコンテナでもRust/Nodeのキャッシュを共有して高速化
       - dev-cargo:/home/vscode/.cargo
       - dev-rustup:/home/vscode/.rustup
       - dev-node:/home/vscode/.local/share/pnpm
@@ -47,6 +55,8 @@ services:
     image: postgres:17
     restart: unless-stopped
     container_name: task-app-db
+    networks:
+      - glance-net
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -55,6 +65,15 @@ services:
       - "5432:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  glance-net:
+    driver: bridge
 
 volumes:
   dev-cargo:
