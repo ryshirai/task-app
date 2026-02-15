@@ -32,6 +32,10 @@
   let showNotifications = false;
   let notificationPollInterval: ReturnType<typeof setInterval> | null = null;
   let notificationMenu: HTMLDivElement | null = null;
+  let navMenu: HTMLDivElement | null = null;
+  let userMenu: HTMLDivElement | null = null;
+  let showNavDropdown = false;
+  let showUserDropdown = false;
 
   $: baseDate = new Date(selectedDate + 'T00:00:00+09:00');
   $: taskIdParam = $page.url.searchParams.get('task_id');
@@ -168,9 +172,15 @@
   }
 
   function handleDocumentClick(event: MouseEvent) {
-    if (!showNotifications || !notificationMenu) return;
-    if (!notificationMenu.contains(event.target as Node)) {
+    const target = event.target as Node;
+    if (showNotifications && notificationMenu && !notificationMenu.contains(target)) {
       showNotifications = false;
+    }
+    if (showNavDropdown && navMenu && !navMenu.contains(target)) {
+      showNavDropdown = false;
+    }
+    if (showUserDropdown && userMenu && !userMenu.contains(target)) {
+      showUserDropdown = false;
     }
   }
 
@@ -380,7 +390,7 @@
 {:else}
 <div class="h-full flex flex-col font-sans relative">
   <!-- Top Bar -->
-  <header class="h-10 px-4 flex items-center justify-between shrink-0 bg-white border-b border-slate-200 shadow-sm z-20">
+  <header class="h-10 px-4 flex items-center justify-between shrink-0 bg-white border-b border-slate-200 shadow-sm z-[100]">
     <div class="flex items-center gap-3">
       <h2 class="text-sm font-black text-slate-800 whitespace-nowrap tracking-tighter uppercase">GlanceFlow</h2>
       {#if $auth.user}
@@ -444,91 +454,101 @@
         </div>
       </div>
       
-      <div class="flex items-center gap-1.5 border-l border-slate-200 pl-3">
-        <button 
-            on:click={() => goto('/reports')}
-            class="px-2.5 py-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-all text-[10px] font-bold border border-transparent hover:border-slate-200"
-        >
-            日報を表示
-        </button>
-        <button 
-            on:click={() => goto('/activity-log')}
-            class="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-            title="操作履歴"
-            aria-label="操作履歴を開く"
-        >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"></path><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"></path></svg>
-        </button>
-        <button
-            on:click={() => goto('/analytics')}
-            class="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-            title="個人分析"
-            aria-label="個人分析を開く"
-        >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>
-        </button>
-        {#if $auth.user?.role === 'admin'}
-        <button
-            on:click={() => goto('/admin/task-reports')}
-            class="px-2.5 py-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-all text-[10px] font-bold border border-transparent hover:border-slate-200"
-        >
-            タスクレポート
-        </button>
-        {/if}
+      <div class="flex items-center gap-1 border-l border-slate-200 pl-3">
+        <!-- Navigation Menu Dropdown -->
+        <div class="relative" bind:this={navMenu}>
+          <button 
+            on:click|stopPropagation={() => showNavDropdown = !showNavDropdown}
+            class="px-2.5 py-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-all text-[10px] font-bold flex items-center gap-1"
+          >
+            ツール
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="transition-transform {showNavDropdown ? 'rotate-180' : ''}"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+
+          {#if showNavDropdown}
+            <div class="absolute left-0 top-9 w-44 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 animate-in fade-in zoom-in-95 duration-100">
+              <button on:click={() => { goto('/reports'); showNavDropdown = false; }} class="w-full text-left px-3 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                日報一覧
+              </button>
+              <button on:click={() => { goto('/activity-log'); showNavDropdown = false; }} class="w-full text-left px-3 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></svg>
+                操作履歴
+              </button>
+              <button on:click={() => { goto('/analytics'); showNavDropdown = false; }} class="w-full text-left px-3 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+                個人分析
+              </button>
+              {#if $auth.user?.role === 'admin'}
+                <div class="h-px bg-slate-100 my-1"></div>
+                <button on:click={() => { goto('/admin/task-reports'); showNavDropdown = false; }} class="w-full text-left px-3 py-2 text-[11px] font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M18 7a4 4 0 0 0-3 3.87"/></svg>
+                  タスクレポート
+                </button>
+              {/if}
+            </div>
+          {/if}
+        </div>
+
         <button 
             on:click={() => goto('/reports/new')}
-            class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-all text-[10px] font-bold shadow-sm"
+            class="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-md transition-all text-[10px] font-bold shadow-sm"
         >
             日報提出
         </button>
 
-        <div class="flex items-center gap-1">
+        <div class="flex items-center gap-0.5 ml-1">
             <div class="relative" bind:this={notificationMenu}>
               <button
                 on:click|stopPropagation={() => showNotifications = !showNotifications}
-                class="relative p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                class="relative p-1.5 text-slate-400 hover:text-slate-600 transition-colors"
                 title="通知"
                 aria-label="通知を開く"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5"></path><path d="M9 17a3 3 0 0 0 6 0"></path></svg>
                 {#if unreadNotificationCount > 0}
-                  <span class="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center">
+                  <span class="absolute top-0.5 right-0.5 min-w-[14px] h-[14px] px-1 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-white">
                     {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
                   </span>
                 {/if}
               </button>
 
               {#if showNotifications}
-                <div class="absolute right-0 top-8 z-50 w-80 max-h-96 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
-                  <div class="flex items-center justify-between px-3 py-2 border-b border-slate-100">
-                    <h3 class="text-xs font-bold text-slate-700">通知</h3>
+                <div class="absolute right-0 top-9 z-50 w-80 max-h-96 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+                    <h3 class="text-xs font-black text-slate-800 uppercase tracking-tight">Notifications</h3>
                     <button
                       on:click={markAllNotificationsAsRead}
                       disabled={unreadNotificationCount === 0}
-                      class="text-[10px] font-bold text-blue-600 disabled:text-slate-300"
+                      class="text-[10px] font-bold text-blue-600 disabled:text-slate-300 hover:underline"
                     >
-                      すべて既読
+                      すべて既読にする
                     </button>
                   </div>
 
                   <div class="max-h-80 overflow-y-auto">
                     {#if notificationsLoading}
-                      <div class="px-3 py-4 text-[11px] text-slate-400">読み込み中...</div>
+                      <div class="px-4 py-8 text-center text-[11px] text-slate-400 font-medium">読み込み中...</div>
                     {:else if notificationsError}
-                      <div class="px-3 py-4 text-[11px] text-red-500">{notificationsError}</div>
+                      <div class="px-4 py-8 text-center text-[11px] text-red-500 font-medium">{notificationsError}</div>
                     {:else if notifications.length === 0}
-                      <div class="px-3 py-4 text-[11px] text-slate-400">通知はありません。</div>
+                      <div class="px-4 py-12 text-center">
+                        <div class="text-slate-200 mb-2 flex justify-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                        </div>
+                        <div class="text-[11px] text-slate-400 font-bold">通知はありません</div>
+                      </div>
                     {:else}
                       {#each notifications as notification (notification.id)}
                         <button
                           on:click={() => handleNotificationClick(notification)}
-                          class="w-full text-left px-3 py-2 border-b border-slate-100 hover:bg-slate-50 transition-colors {notification.is_read ? 'opacity-70' : 'bg-blue-50/50'}"
+                          class="w-full text-left px-4 py-3 border-b border-slate-50 hover:bg-slate-50 transition-colors {notification.is_read ? 'opacity-60' : 'bg-blue-50/30'}"
                         >
-                          <div class="text-[11px] font-bold text-slate-800">{notification.title}</div>
+                          <div class="text-[11px] font-bold text-slate-800 mb-0.5">{notification.title}</div>
                           {#if notification.body}
-                            <div class="text-[10px] text-slate-500 mt-0.5 leading-snug">{notification.body}</div>
+                            <div class="text-[10px] text-slate-500 leading-relaxed line-clamp-2">{notification.body}</div>
                           {/if}
-                          <div class="text-[9px] text-slate-400 mt-1">{new Date(notification.created_at).toLocaleString('ja-JP')}</div>
+                          <div class="text-[9px] text-slate-400 mt-1.5 font-medium">{new Date(notification.created_at).toLocaleString('ja-JP')}</div>
                         </button>
                       {/each}
                     {/if}
@@ -537,19 +557,49 @@
               {/if}
             </div>
 
-            <button on:click={() => showProfile = true} class="p-1 text-slate-400 hover:text-slate-600 transition-colors" title="プロフィール設定" aria-label="プロフィール設定を開く">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-            </button>
+            <!-- User Menu Dropdown -->
+            <div class="relative" bind:this={userMenu}>
+              <button 
+                on:click|stopPropagation={() => showUserDropdown = !showUserDropdown}
+                class="p-1 rounded-full hover:bg-slate-100 transition-all border-2 border-transparent {showUserDropdown ? 'border-slate-200 bg-slate-50' : ''}"
+              >
+                {#if $auth.user?.avatar_url}
+                  <img src={$auth.user.avatar_url} alt="Profile" class="w-6 h-6 rounded-full object-cover shadow-sm" />
+                {:else}
+                  <div class="w-6 h-6 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-[10px] font-black text-white shadow-sm">
+                    {$auth.user?.name.charAt(0).toUpperCase()}
+                  </div>
+                {/if}
+              </button>
 
-            {#if $auth.user?.role === 'admin'}
-            <button on:click={() => showUserManagement = true} class="p-1 text-slate-400 hover:text-slate-600 transition-colors" title="ユーザー管理" aria-label="ユーザー管理を開く">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
-            </button>
-            {/if}
+              {#if showUserDropdown}
+                <div class="absolute right-0 top-9 w-52 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div class="px-4 py-2 border-b border-slate-50 mb-1">
+                    <div class="text-[11px] font-black text-slate-800 truncate">{$auth.user?.name}</div>
+                    <div class="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{$auth.user?.role}</div>
+                  </div>
+                  
+                  <button on:click={() => { showProfile = true; showUserDropdown = false; }} class="w-full text-left px-4 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    プロフィール設定
+                  </button>
 
-            <button on:click={logout} class="p-1 text-slate-400 hover:text-red-600 transition-colors" title="ログアウト" aria-label="ログアウト">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-            </button>
+                  {#if $auth.user?.role === 'admin'}
+                    <button on:click={() => { showUserManagement = true; showUserDropdown = false; }} class="w-full text-left px-4 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                      メンバー管理
+                    </button>
+                  {/if}
+
+                  <div class="h-px bg-slate-100 my-1"></div>
+                  
+                  <button on:click={logout} class="w-full text-left px-4 py-2 text-[11px] font-bold text-red-500 hover:bg-red-50 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    ログアウト
+                  </button>
+                </div>
+              {/if}
+            </div>
         </div>
       </div>
     </div>
