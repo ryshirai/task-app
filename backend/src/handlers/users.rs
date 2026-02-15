@@ -33,16 +33,20 @@ pub async fn get_users(
     for user in users {
         let time_logs = sqlx::query_as::<_, TaskTimeLog>(
             "SELECT l.id, l.organization_id, l.user_id, l.task_id, l.start_at, l.end_at, l.duration_minutes::BIGINT AS duration_minutes,
-                    t.title AS task_title, t.status AS task_status, t.progress_rate AS task_progress_rate, t.tags AS task_tags,
+                    t.title AS task_title, t.status AS task_status, t.progress_rate AS task_progress_rate,
+                    ARRAY_REMOVE(ARRAY_AGG(DISTINCT tg.name), NULL) AS task_tags,
                     COALESCE(sums.total, 0)::BIGINT AS total_duration_minutes
              FROM task_time_logs l
              JOIN tasks t ON t.id = l.task_id AND t.organization_id = l.organization_id
+             LEFT JOIN task_tags tt ON t.id = tt.task_id
+             LEFT JOIN tags tg ON tt.tag_id = tg.id
              LEFT JOIN (
                  SELECT task_id, SUM(duration_minutes) as total 
                  FROM task_time_logs 
                  GROUP BY task_id
              ) sums ON sums.task_id = l.task_id
              WHERE l.organization_id = $1 AND l.user_id = $2 AND (l.start_at AT TIME ZONE 'Asia/Tokyo')::date = $3
+             GROUP BY l.id, t.id, sums.total
              ORDER BY l.start_at ASC, l.id ASC"
         )
             .bind(claims.organization_id)

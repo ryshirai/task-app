@@ -20,9 +20,8 @@ pub struct Task {
     pub title: String,
     pub status: String,
     pub progress_rate: i32,
-    pub tags: Option<Vec<String>>,
-    pub start_at: DateTime<Utc>,
-    pub end_at: DateTime<Utc>,
+    #[sqlx(default)]
+    pub tags: Option<Vec<String>>, // Now aggregated from relation
     pub created_at: DateTime<Utc>,
     #[sqlx(default)]
     pub total_duration_minutes: i64,
@@ -73,6 +72,8 @@ pub struct TaskReportRow {
     pub task: Task,
     pub user_name: String,
     pub total_duration_minutes: i64,
+    pub start_at: Option<DateTime<Utc>>,
+    pub end_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Serialize, Deserialize, sqlx::FromRow)]
@@ -131,8 +132,17 @@ pub struct CreateTaskInput {
     pub member_id: i32,
     pub title: String,
     pub tags: Option<Vec<String>>,
-    pub start_at: DateTime<Utc>,
-    pub end_at: DateTime<Utc>,
+    // start_at/end_at removed, task entity creation only.
+    // If time log is needed, use add_time_log.
+}
+
+#[derive(Deserialize)]
+pub struct UpdateTaskInput {
+    pub member_id: Option<i32>,
+    pub title: Option<String>,
+    pub status: Option<String>,
+    pub progress_rate: Option<i32>,
+    pub tags: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -215,17 +225,6 @@ pub struct Claims {
 pub struct UpdatePasswordInput {
     pub current_password: String,
     pub new_password: String,
-}
-
-#[derive(Deserialize)]
-pub struct UpdateTaskInput {
-    pub member_id: Option<i32>,
-    pub title: Option<String>,
-    pub status: Option<String>,
-    pub progress_rate: Option<i32>,
-    pub tags: Option<Vec<String>>,
-    pub start_at: Option<DateTime<Utc>>,
-    pub end_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Deserialize)]
