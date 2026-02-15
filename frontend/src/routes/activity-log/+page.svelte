@@ -14,6 +14,11 @@
   let filterUserId = '';
   let filterStartDate = '';
   let filterEndDate = '';
+  type LogChange = {
+    field: string;
+    old: unknown;
+    new: unknown;
+  };
 
   function buildQueryParams(includePagination: boolean): URLSearchParams {
     const params = new URLSearchParams();
@@ -133,6 +138,72 @@
     if (action.includes('deleted')) return 'text-red-600 bg-red-50';
     return 'text-blue-600 bg-blue-50';
   }
+
+  function parseDetails(details?: string): { changes: LogChange[]; text: string | null } {
+    if (!details) {
+      return { changes: [], text: null };
+    }
+
+    try {
+      const parsed = JSON.parse(details) as { changes?: unknown };
+      if (parsed && Array.isArray(parsed.changes)) {
+        const changes = parsed.changes
+          .filter((item): item is LogChange => {
+            return (
+              !!item &&
+              typeof item === 'object' &&
+              'field' in item &&
+              'old' in item &&
+              'new' in item &&
+              typeof (item as { field: unknown }).field === 'string'
+            );
+          })
+          .map((item) => ({
+            field: item.field,
+            old: item.old,
+            new: item.new
+          }));
+
+        return { changes, text: null };
+      }
+    } catch {
+      // Backward compatibility for legacy plain-string details
+    }
+
+    return { changes: [], text: details };
+  }
+
+  function formatField(field: string): string {
+    return field.replace(/_/g, ' ');
+  }
+
+  function formatDetailValue(value: unknown): string {
+    if (value === null || value === undefined) return '-';
+    if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '-';
+    if (typeof value === 'object') {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return String(value);
+      }
+    }
+    return String(value);
+  }
+
+  function navigateToTarget(log: ActivityLog) {
+    if (!log.target_id) return;
+    if (log.target_type === 'task') {
+      goto(`/?task_id=${log.target_id}`);
+      return;
+    }
+    if (log.target_type === 'report') {
+      goto(`/reports/${log.target_id}`);
+    }
+  }
+
+  function canDeepLink(log: ActivityLog): boolean {
+    return !!log.target_id && (log.target_type === 'task' || log.target_type === 'report');
+  }
 </script>
 
 <div class="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -204,7 +275,7 @@
         <div class="text-center text-slate-400 italic">まだログがありません。</div>
       {:else}
         <div class="overflow-x-auto">
-          <table class="table-auto w-full border-collapse text-xs">
+          <table class="table-fixed w-full border-collapse text-xs">
             <thead>
               <tr class="border-b border-slate-200 bg-slate-50">
                 <th class="px-3 py-1.5 text-left font-bold text-slate-600">日時</th>
@@ -223,13 +294,44 @@
                     {log.user_name}
                   </td>
                   <td class="px-3 py-1.5">
-                    <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase {getActionColor(log.action)}">
-                      {formatAction(log.action)}
-                    </span>
+                    <div class="flex items-center gap-2">
+                      <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase {getActionColor(log.action)}">
+                        {formatAction(log.action)}
+                      </span>
+                      {#if canDeepLink(log)}
+                        <button
+                          class="inline-flex items-center rounded border border-slate-300 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
+                          on:click={() => navigateToTarget(log)}
+                          aria-label="Open target"
+                          title="Open target"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07L11.9 5" />
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07L12.1 19" />
+                          </svg>
+                        </button>
+                      {/if}
+                    </div>
                   </td>
-                  <td class="px-3 py-1.5 text-slate-600">
+                  <td class="px-3 py-1.5 text-slate-600 break-words whitespace-pre-wrap max-w-[480px]">
                     {#if log.details}
-                      {log.details}
+                      {@const parsed = parseDetails(log.details)}
+                      {#if parsed.changes.length > 0}
+                        <div class="space-y-1">
+                          {#each parsed.changes as change}
+                            <div class="flex flex-wrap items-center gap-1">
+                              <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">{formatField(change.field)}</span>
+                              <span class="text-red-600">{formatDetailValue(change.old)}</span>
+                              <span class="text-slate-400">→</span>
+                              <span class="text-emerald-600">{formatDetailValue(change.new)}</span>
+                            </div>
+                          {/each}
+                        </div>
+                      {:else if parsed.text}
+                        {parsed.text}
+                      {:else}
+                        <span class="text-slate-400 italic">-</span>
+                      {/if}
                     {:else}
                       <span class="text-slate-400 italic">-</span>
                     {/if}

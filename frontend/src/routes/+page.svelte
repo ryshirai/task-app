@@ -12,6 +12,7 @@
   import { upsertTask } from '$lib/taskUtils';
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
 
   let users: User[] = [];
   let loading = true;
@@ -25,8 +26,16 @@
   let taskEventUnsubscribers: Array<() => void> = [];
   let filterText = '';
   let selectedDate = new Date().toISOString().split('T')[0];
+  let observedTaskIdParam: string | null = null;
+  let deepLinkHandled = false;
 
   $: baseDate = new Date(selectedDate);
+  $: taskIdParam = $page.url.searchParams.get('task_id');
+
+  $: if (taskIdParam !== observedTaskIdParam) {
+    observedTaskIdParam = taskIdParam;
+    deepLinkHandled = false;
+  }
 
   $: filteredUsers = users.map(u => ({
     ...u,
@@ -135,6 +144,24 @@
 
   $: if (selectedDate && $auth.token) {
       fetchUsers();
+  }
+
+  $: if (!deepLinkHandled && !loading) {
+    deepLinkHandled = true;
+    if (taskIdParam) {
+      const taskId = Number(taskIdParam);
+      if (Number.isInteger(taskId)) {
+        let deepLinkedTask: Task | undefined;
+        for (const user of users) {
+          deepLinkedTask = user.tasks.find(task => task.id === taskId);
+          if (deepLinkedTask) break;
+        }
+
+        if (deepLinkedTask) {
+          editingTask = deepLinkedTask;
+        }
+      }
+    }
   }
 
   type CreateTaskPayload = { member_id: number; title: string; tags: string[]; start: Date; end: Date };
