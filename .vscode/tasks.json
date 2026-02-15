@@ -4,7 +4,7 @@
     {
       "label": "gemini",
       "type": "shell",
-      "command": "docker exec -it -u vscode task-app-ai bash -c gemini",
+      "command": "docker exec -it -u vscode task-app-ai bash -c 'export GEMINI_SYSTEM_MD=/workspace/system.md && gemini --yolo'",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
