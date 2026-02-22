@@ -1,8 +1,8 @@
 use backend::email::{EmailService, SendgridEmailProvider, StdoutEmailProvider};
 use backend::{AppState, WsMessage, build_app};
+use lambda_http::{Error, run};
 use serde::Deserialize;
 use sqlx::postgres::PgPoolOptions;
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast;
@@ -24,10 +24,6 @@ fn default_db_idle_timeout_seconds() -> u64 {
 
 fn default_db_max_lifetime_seconds() -> u64 {
     1800
-}
-
-fn default_port() -> u16 {
-    3000
 }
 
 fn default_email_provider() -> String {
@@ -58,8 +54,6 @@ struct Config {
     db_max_lifetime_seconds: u64,
     #[serde(rename = "JWT_SECRET")]
     jwt_secret: String,
-    #[serde(rename = "PORT", default = "default_port")]
-    port: u16,
     #[serde(rename = "EMAIL_PROVIDER", default = "default_email_provider")]
     email_provider: String,
     #[serde(rename = "SENDGRID_API_KEY")]
@@ -74,14 +68,11 @@ impl Config {
     }
 }
 
-/// Application entry point.
-///
-/// Loads environment variables, initializes shared state, runs migrations,
-/// registers HTTP routes, and starts the Axum server.
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Error> {
     dotenvy::dotenv().ok();
 
+    // This initialization runs once per warm Lambda container.
     let config = Config::from_env().expect("configuration error");
 
     let pool = PgPoolOptions::new()
@@ -93,7 +84,6 @@ async fn main() {
         .expect("Failed to connect to Postgres");
 
     if config.run_migrations {
-        // Run startup migrations only when explicitly enabled.
         sqlx::migrate!("./migrations")
             .run(&pool)
             .await
@@ -125,8 +115,5 @@ async fn main() {
     };
 
     let app = build_app(state);
-    let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
-    println!("listening on {}", addr);
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    run(app).await
 }

@@ -444,6 +444,8 @@ pub struct RegisterInput {
 /// Request body for creating an invitation.
 #[derive(Deserialize)]
 pub struct CreateInvitationInput {
+    /// Email address to send the invitation to.
+    pub email: String,
     /// Role granted to invited users.
     pub role: String,
 }

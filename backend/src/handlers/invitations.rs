@@ -39,6 +39,17 @@ pub async fn create_invitation(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    // Send invitation email via email service.
+    state
+        .email_service
+        .send_invitation_email(
+            &input.email,
+            &invitation.token,
+            invitation.org_name.as_deref().unwrap_or("Your Organization"),
+        )
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
     Ok((StatusCode::CREATED, Json(invitation)))
 }
 

@@ -1,3 +1,4 @@
+pub mod email;
 mod handlers;
 mod middleware;
 mod models;
@@ -8,6 +9,7 @@ use axum::{
     routing::{get, post},
 };
 use sqlx::{Pool, Postgres};
+use std::sync::Arc;
 use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 
@@ -31,6 +33,8 @@ pub struct AppState {
     pub jwt_secret: String,
     /// Broadcast sender for real-time events.
     pub tx: broadcast::Sender<WsMessage>,
+    /// Email delivery service abstraction.
+    pub email_service: Arc<dyn email::EmailService>,
 }
 
 /// Builds authentication-related routes.

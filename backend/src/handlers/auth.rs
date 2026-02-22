@@ -231,7 +231,8 @@ pub async fn join(
 
 /// Creates a password-reset token for a user identified by username.
 ///
-/// The token is stored in the database and printed to stdout for local flows.
+/// The token is stored in the database and delivered through the configured
+/// email provider.
 pub async fn forgot_password(
     State(state): State<AppState>,
     Json(input): Json<ForgotPasswordInput>,
@@ -257,12 +258,21 @@ pub async fn forgot_password(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // Step 4: Emit token to stdout (existing behavior).
-    println!(
-        "PASSWORD RESET TOKEN for {}: {}",
-        user.username.unwrap_or_default(),
-        token
-    );
+    // Step 4: Send password reset email through configured provider.
+    let recipient = user
+        .email
+        .clone()
+        .or_else(|| user.username.clone())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            "User has no email or username to send reset instructions".to_string(),
+        ))?;
+
+    state
+        .email_service
+        .send_password_reset_email(&recipient, &token)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
     Ok(StatusCode::OK)
 }

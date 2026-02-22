@@ -16,6 +16,11 @@ tower-http = { version = "0.6.8", features = ["cors"] }
 argon2 = "0.5.3"
 jsonwebtoken = "9.3.0"
 uuid = { version = "1.11.0", features = ["v4"] }
+async-trait = "0.1.89"
+reqwest = { version = "0.12.24", default-features = false, features = ["json", "rustls-tls"] }
+envy = "0.4.2"
+lambda-http = "0.14.0"
+tower = { version = "0.5.2", features = ["util"] }
 
 [dev-dependencies]
 axum-test = "17"

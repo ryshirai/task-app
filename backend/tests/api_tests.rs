@@ -1,5 +1,6 @@
 use axum::http::StatusCode;
 use axum_test::TestServer;
+use backend::email::StdoutEmailProvider;
 use backend::{AppState, WsMessage, build_app};
 use argon2::{
     Argon2,
@@ -7,6 +8,7 @@ use argon2::{
 };
 use serde_json::json;
 use sqlx::{PgPool, postgres::PgPoolOptions};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::{OnceCell, broadcast};
@@ -27,6 +29,7 @@ fn build_app_with_pool(pool: PgPool) -> TestServer {
         pool,
         jwt_secret: TEST_JWT_SECRET.to_string(),
         tx,
+        email_service: Arc::new(StdoutEmailProvider::new("http://localhost:5173".to_string())),
     };
 
     TestServer::new(build_app(state)).expect("failed to build test server")
