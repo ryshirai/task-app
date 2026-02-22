@@ -19,6 +19,14 @@
   $: taskStatus = (task.task_status || 'todo') as TaskStatus;
   $: taskProgressRate = task.task_progress_rate ?? 0;
   $: taskTags = task.task_tags || [];
+  $: taskDescription =
+    task.task_description ??
+    (task as TaskTimeLog & { description?: string | null }).description ??
+    null;
+  $: taskDescriptionText = taskDescription?.trim() || '';
+  $: taskTooltip = taskDescriptionText
+    ? `${taskTitle} (${statusMap[taskStatus]}, ${taskProgressRate}%)\n${taskDescriptionText}`
+    : `${taskTitle} (${statusMap[taskStatus]}, ${taskProgressRate}%)`;
 
   let isOverdue = false;
   let interval: ReturnType<typeof setInterval>;
@@ -166,7 +174,7 @@
   style="left: {left}%; width: {width}%; cursor: grab;"
   class:cursor-grabbing={isDragging && dragMode === 'move'}
   class:brightness-110={isDragging}
-  title="{taskTitle} ({statusMap[taskStatus]}, {taskProgressRate}%)"
+  title={taskTooltip}
   on:mousedown={(e) => handleMouseDown(e, 'move')}
   role="button"
   tabindex="0"

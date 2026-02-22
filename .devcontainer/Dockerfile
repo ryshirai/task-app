@@ -16,7 +16,7 @@ RUN if [ "$USER_UID" != "1000" ]; then \
 # 基本ツール (git, ripgrep, jqなど) [cite: 2]
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential pkg-config curl git ca-certificates unzip \
-    python3 python3-pip ripgrep jq postgresql-client-common gh \
+    python3 python3-pip ripgrep jq postgresql-client-16 gh \
     && rm -rf /var/lib/apt/lists/*
 
 # Node.js (20.x LTS) & corepack [cite: 3]

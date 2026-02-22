@@ -33,7 +33,7 @@ pub async fn get_users(
     for user in users {
         let time_logs = sqlx::query_as::<_, TaskTimeLog>(
             "SELECT l.id, l.organization_id, l.user_id, l.task_id, l.start_at, l.end_at, l.duration_minutes::BIGINT AS duration_minutes,
-                    t.title AS task_title, t.status AS task_status, t.progress_rate AS task_progress_rate,
+                    t.title AS task_title, t.description AS task_description, t.status AS task_status, t.progress_rate AS task_progress_rate,
                     ARRAY_REMOVE(ARRAY_AGG(DISTINCT tg.name), NULL) AS task_tags,
                     COALESCE(sums.total, 0)::BIGINT AS total_duration_minutes
              FROM task_time_logs l

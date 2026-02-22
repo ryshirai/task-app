@@ -15,6 +15,7 @@
 
   const dispatch = createEventDispatcher();
   let title = '';
+  let description = '';
   let tagsInput = '';
   let selectedTaskId: number | null = null;
   let activeTasks: Task[] = [];
@@ -44,6 +45,7 @@
   /** Prefills form values from an existing active task. */
   function selectTask(task: Task) {
     title = task.title.toString();
+    description = task.description || '';
     tagsInput = (task.tags || []).join(', ');
     selectedTaskId = task.id;
     // Auto-focus tags after selecting a title if it's already structured
@@ -56,12 +58,14 @@
       const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t !== '');
       dispatch('submit', { 
         title: selectedTaskId ? null : title, 
+        description: selectedTaskId ? null : (description.trim() || null),
         tags: selectedTaskId ? null : tags, 
         task_id: selectedTaskId,
         start, 
         end 
       });
       title = '';
+      description = '';
       tagsInput = '';
       selectedTaskId = null;
     } else {
@@ -81,7 +85,7 @@
     const nextTarget = event.relatedTarget as Node | null;
     if (nextTarget && formElement?.contains(nextTarget)) return;
     // Don't auto-cancel if we have a title or we are interacting with active tasks
-    if (!title.trim() && !tagsInput.trim()) {
+    if (!title.trim() && !description.trim() && !tagsInput.trim()) {
       dispatch('cancel');
     }
   }
@@ -156,7 +160,7 @@
           </datalist>
           {#if selectedTaskId}
             <div class="absolute right-3 top-1/2 -translate-y-1/2">
-              <span class="text-[9px] font-black text-blue-500 uppercase tracking-tighter bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">Linked</span>
+              <span class="text-[9px] font-black text-blue-500 uppercase tracking-tighter bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">リンク済み</span>
             </div>
           {/if}
         </div>
@@ -171,6 +175,18 @@
           placeholder="開発, デザイン, 会議など (カンマ区切り)"
           class="w-full rounded-xl border border-slate-200 px-3 py-2 text-[11px] text-slate-600 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
         />
+      </div>
+
+      <div>
+        <label for="task-form-description" class="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">詳細</label>
+        <textarea
+          id="task-form-description"
+          bind:value={description}
+          on:keydown={handleKeydown}
+          rows="3"
+          placeholder="詳細"
+          class="w-full resize-y rounded-xl border border-slate-200 px-3 py-2 text-[11px] text-slate-600 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+        ></textarea>
       </div>
 
       <div class="flex items-center justify-end gap-3 pt-2">

@@ -92,7 +92,7 @@ async fn fetch_task_report_rows(
     query: &TaskReportQuery,
 ) -> Result<Vec<TaskReportRow>, (StatusCode, String)> {
     let mut query_builder = QueryBuilder::<Postgres>::new(
-        "SELECT t.id, t.organization_id, t.member_id, t.title, t.status, t.progress_rate, t.tags, 
+        "SELECT t.id, t.organization_id, t.member_id, t.title, t.description, t.status, t.progress_rate, t.tags, 
          COALESCE(MIN(l.start_at), t.start_at) as start_at, 
          COALESCE(MAX(l.end_at), t.end_at) as end_at, 
          t.created_at,
@@ -103,7 +103,7 @@ async fn fetch_task_report_rows(
     );
     append_task_report_filters(&mut query_builder, query, organization_id);
     query_builder.push(
-        " GROUP BY t.id, t.organization_id, t.member_id, t.title, t.status, t.progress_rate, t.tags, t.start_at, t.end_at, t.created_at, u.name \
+        " GROUP BY t.id, t.organization_id, t.member_id, t.title, t.description, t.status, t.progress_rate, t.tags, t.start_at, t.end_at, t.created_at, u.name \
           ORDER BY start_at ASC, t.id ASC",
     );
 
@@ -165,7 +165,7 @@ async fn fetch_time_log_with_task(
 ) -> Result<TaskTimeLog, (StatusCode, String)> {
     sqlx::query_as::<_, TaskTimeLog>(
         "SELECT l.id, l.organization_id, l.user_id, l.task_id, l.start_at, l.end_at, l.duration_minutes::BIGINT AS duration_minutes,
-                t.title AS task_title, t.status AS task_status, t.progress_rate AS task_progress_rate, 
+                t.title AS task_title, t.description AS task_description, t.status AS task_status, t.progress_rate AS task_progress_rate, 
                 ARRAY_REMOVE(ARRAY_AGG(DISTINCT tg.name), NULL) AS task_tags,
                 COALESCE(sums.total, 0)::BIGINT AS total_duration_minutes
          FROM task_time_logs l
@@ -205,7 +205,7 @@ pub async fn add_time_log(
 
     let task_id = if let Some(task_id) = input.task_id {
         let task = sqlx::query_as::<_, Task>(
-            "SELECT t.id, t.organization_id, t.member_id, t.title, t.status, t.progress_rate, t.created_at,
+            "SELECT t.id, t.organization_id, t.member_id, t.title, t.description, t.status, t.progress_rate, t.created_at,
                     ARRAY_REMOVE(ARRAY_AGG(DISTINCT tg.name), NULL) as tags,
                     COALESCE(SUM(l.duration_minutes), 0)::BIGINT AS total_duration_minutes 
              FROM tasks t 
@@ -240,7 +240,7 @@ pub async fn add_time_log(
 
         // Search for an existing task with the same title that is not done
         let existing_task = sqlx::query_as::<_, Task>(
-            "SELECT t.id, t.organization_id, t.member_id, t.title, t.status, t.progress_rate, t.created_at,
+            "SELECT t.id, t.organization_id, t.member_id, t.title, t.description, t.status, t.progress_rate, t.created_at,
                     ARRAY_REMOVE(ARRAY_AGG(DISTINCT tg.name), NULL) as tags,
                     COALESCE(SUM(l.duration_minutes), 0)::BIGINT AS total_duration_minutes 
              FROM tasks t 
@@ -268,13 +268,14 @@ pub async fn add_time_log(
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
             let created_task = sqlx::query_as::<_, Task>(
-                "INSERT INTO tasks (organization_id, member_id, title)
-                 VALUES ($1, $2, $3)
-                 RETURNING id, organization_id, member_id, title, status, progress_rate, created_at, NULL::text[] as tags, 0::bigint as total_duration_minutes",
+                "INSERT INTO tasks (organization_id, member_id, title, description)
+                 VALUES ($1, $2, $3, $4)
+                 RETURNING id, organization_id, member_id, title, description, status, progress_rate, created_at, NULL::text[] as tags, 0::bigint as total_duration_minutes",
             )
             .bind(claims.organization_id)
             .bind(input.user_id)
             .bind(title)
+            .bind(&input.description)
             .fetch_one(&mut *tx)
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -447,7 +448,7 @@ pub async fn get_tasks(
     Query(query): Query<GetTasksQuery>,
 ) -> Result<Json<Vec<Task>>, (StatusCode, String)> {
     let mut query_builder = QueryBuilder::<Postgres>::new(
-        "SELECT t.id, t.organization_id, t.member_id, t.title, t.status, t.progress_rate, t.created_at,
+        "SELECT t.id, t.organization_id, t.member_id, t.title, t.description, t.status, t.progress_rate, t.created_at,
                 ARRAY_REMOVE(ARRAY_AGG(DISTINCT tg.name), NULL) as tags,
                 COALESCE(SUM(l.duration_minutes), 0)::BIGINT AS total_duration_minutes
          FROM tasks t
@@ -461,6 +462,77 @@ pub async fn get_tasks(
     if let Some(member_id) = query.member_id {
         query_builder.push(" AND t.member_id = ");
         query_builder.push_bind(member_id);
+    }
+
+    if let Some(group_id) = query.group_id {
+        query_builder.push(
+            " AND EXISTS (
+                SELECT 1
+                FROM display_groups dg
+                JOIN display_group_members dgm ON dgm.group_id = dg.id
+                WHERE dg.id = ",
+        );
+        query_builder
+            .push_bind(group_id)
+            .push(" AND dg.organization_id = ")
+            .push_bind(claims.organization_id)
+            .push(" AND dg.user_id = ")
+            .push_bind(claims.user_id)
+            .push(" AND dgm.member_id = t.member_id
+            )");
+    }
+
+    if let Some(q) = query.q {
+        let q = q.trim();
+        if !q.is_empty() {
+            let like_pattern = format!("%{q}%");
+            query_builder.push(" AND (");
+            query_builder
+                .push("t.title ILIKE ")
+                .push_bind(like_pattern.clone());
+            query_builder.push(
+                " OR EXISTS (
+                    SELECT 1
+                    FROM task_tags tt_q
+                    JOIN tags tg_q ON tg_q.id = tt_q.tag_id
+                    WHERE tt_q.task_id = t.id
+                      AND tg_q.organization_id = ",
+            );
+            query_builder
+                .push_bind(claims.organization_id)
+                .push(" AND tg_q.name ILIKE ")
+                .push_bind(like_pattern.clone())
+                .push(")");
+            query_builder.push(
+                " OR EXISTS (
+                    SELECT 1
+                    FROM users u_q
+                    WHERE u_q.id = t.member_id
+                      AND u_q.organization_id = ",
+            );
+            query_builder
+                .push_bind(claims.organization_id)
+                .push(" AND u_q.username ILIKE ")
+                .push_bind(like_pattern)
+                .push(")");
+            query_builder.push(")");
+        }
+    }
+
+    if let Some(date) = query.date {
+        query_builder.push(
+            " AND EXISTS (
+                SELECT 1
+                FROM task_time_logs l_filter
+                WHERE l_filter.task_id = t.id
+                  AND l_filter.organization_id = t.organization_id
+                  AND (l_filter.start_at AT TIME ZONE 'Asia/Tokyo')::date <= ",
+        );
+        query_builder
+            .push_bind(date)
+            .push(" AND (l_filter.end_at AT TIME ZONE 'Asia/Tokyo')::date >= ")
+            .push_bind(date)
+            .push(")");
     }
 
     if let Some(status) = query.status {
@@ -497,11 +569,12 @@ pub async fn create_task(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let task = sqlx::query_as::<_, Task>(
-        "INSERT INTO tasks (organization_id, member_id, title) VALUES ($1, $2, $3) RETURNING id, organization_id, member_id, title, status, progress_rate, created_at, NULL::text[] as tags, 0::bigint as total_duration_minutes",
+        "INSERT INTO tasks (organization_id, member_id, title, description) VALUES ($1, $2, $3, $4) RETURNING id, organization_id, member_id, title, description, status, progress_rate, created_at, NULL::text[] as tags, 0::bigint as total_duration_minutes",
     )
     .bind(claims.organization_id)
     .bind(input.member_id)
     .bind(&input.title)
+    .bind(&input.description)
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -610,13 +683,15 @@ pub async fn update_task(
         "UPDATE tasks SET 
             member_id = COALESCE($1, member_id),
             title = COALESCE($2, title),
-            status = COALESCE($3, status),
-            progress_rate = COALESCE($4, progress_rate),
+            description = COALESCE($3, description),
+            status = COALESCE($4, status),
+            progress_rate = COALESCE($5, progress_rate),
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = $5 AND organization_id = $6",
+        WHERE id = $6 AND organization_id = $7",
     )
     .bind(input.member_id)
     .bind(&input.title)
+    .bind(&input.description)
     .bind(&input.status)
     .bind(input.progress_rate)
     .bind(id)
