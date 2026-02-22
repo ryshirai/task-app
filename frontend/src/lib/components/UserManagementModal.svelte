@@ -10,6 +10,7 @@
   let newUsername = '';
   let newPassword = '';
   let invitationLink = '';
+  let updatingRoleMemberId: number | null = null;
   let dialog: HTMLDialogElement;
 
   async function handleIssueInvitation() {
@@ -58,6 +59,31 @@
     }
   }
 
+  async function handleUpdateRole(memberId: number, newRole: 'admin' | 'user') {
+    try {
+      updatingRoleMemberId = memberId;
+      const res = await fetch(`http://localhost:3000/api/users/${memberId}/role`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${$auth.token}`
+        },
+        body: JSON.stringify({ role: newRole })
+      });
+
+      if (!res.ok) throw new Error('ロールの変更に失敗しました');
+
+      members = members.map((member) =>
+        member.id === memberId ? { ...member, role: newRole } : member
+      );
+      dispatch('updateMember', { memberId, role: newRole });
+    } catch (e: any) {
+      alert(e.message || 'ロールの変更に失敗しました');
+    } finally {
+      updatingRoleMemberId = null;
+    }
+  }
+
   onMount(() => {
     dialog.showModal();
   });
@@ -98,6 +124,8 @@
         <h4 class="text-xs font-bold text-slate-500 uppercase mb-2 tracking-widest px-1">登録済みユーザー</h4>
         <div class="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-[250px] overflow-y-auto">
           {#each members as member}
+            {@const isSelfAdmin = member.id === $auth.user?.id && member.role === 'admin'}
+            {@const isUpdatingRole = updatingRoleMemberId === member.id}
             <div class="p-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
               <div class="flex items-center gap-3">
                  {#if member.avatar_url}
@@ -109,19 +137,37 @@
                  {/if}
                  <div class="flex flex-col">
                     <span class="font-bold text-slate-700 text-sm">{member.name}</span>
-                    <span class="text-[10px] text-slate-400 font-mono">@{member.username || 'no-id'} · {member.role}</span>
+                    <span class="text-[10px] text-slate-400 font-mono">@{member.username || 'no-id'} · {member.role === 'user' ? 'member' : member.role}</span>
                  </div>
               </div>
-              {#if member.role !== 'admin'}
-              <button 
-                on:click={() => handleDeleteMember(member.id)}
-                class="text-slate-300 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition-all"
-                title="削除"
-                aria-label={`${member.name}を削除`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-              </button>
-              {/if}
+              <div class="flex items-center gap-2">
+                <div class="inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5">
+                  <button
+                    on:click={() => handleUpdateRole(member.id, 'admin')}
+                    disabled={isSelfAdmin || isUpdatingRole || member.role === 'admin'}
+                    class="px-2 py-1 text-[10px] font-bold rounded-md transition-colors {member.role === 'admin' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'} disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    admin
+                  </button>
+                  <button
+                    on:click={() => handleUpdateRole(member.id, 'user')}
+                    disabled={isSelfAdmin || isUpdatingRole || member.role === 'user'}
+                    class="px-2 py-1 text-[10px] font-bold rounded-md transition-colors {member.role === 'user' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'} disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    member
+                  </button>
+                </div>
+                {#if member.role !== 'admin'}
+                <button 
+                  on:click={() => handleDeleteMember(member.id)}
+                  class="text-slate-300 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition-all"
+                  title="削除"
+                  aria-label={`${member.name}を削除`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                </button>
+                {/if}
+              </div>
             </div>
           {/each}
           {#if members.length === 0}

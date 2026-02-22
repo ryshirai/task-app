@@ -477,6 +477,13 @@ pub struct UpdatePasswordInput {
     pub new_password: String,
 }
 
+/// Request body for updating a user's role.
+#[derive(Deserialize)]
+pub struct UpdateUserRoleInput {
+    /// New role to set for the target user.
+    pub role: String,
+}
+
 /// Request body for updating a report's content.
 #[derive(Deserialize)]
 pub struct UpdateReportInput {

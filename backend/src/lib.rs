@@ -61,6 +61,7 @@ fn build_user_routes(state: &AppState) -> Router<AppState> {
             axum::routing::delete(handlers::users::delete_user)
                 .layer(axum_middleware::from_fn(middleware::admin_only)),
         )
+        .route("/{id}/role", axum::routing::put(handlers::users::update_user_role))
         .layer(axum_middleware::from_fn_with_state(
             state.clone(),
             middleware::auth_middleware,
