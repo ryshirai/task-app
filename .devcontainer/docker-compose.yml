@@ -48,6 +48,8 @@ services:
       - ai-cache-codex:/home/vscode/.codex
       - ai-cache-gemini:/home/vscode/.gemini
       - ${OBSIDIAN_VAULT_PATH}:/workspace/obsidian-vault:cached
+      - ~/.gitconfig:/home/vscode/.gitconfig:ro
+      - ~/.config/gh:/home/vscode/.config/gh:ro
     working_dir: /workspace
     environment:
       - RUST_BACKTRACE=1
