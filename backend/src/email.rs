@@ -1,5 +1,6 @@
 use async_trait::async_trait;
-use reqwest::Client;
+use aws_sdk_sesv2::Client as SesClient;
+use aws_sdk_sesv2::types::{Body, Content, Destination, EmailContent, Message};
 
 #[async_trait]
 pub trait EmailService: Send + Sync {
@@ -34,10 +35,7 @@ impl StdoutEmailProvider {
 #[async_trait]
 impl EmailService for StdoutEmailProvider {
     async fn send_password_reset_email(&self, to: &str, token: &str) -> Result<(), String> {
-        println!(
-            "PASSWORD RESET EMAIL to {to}: {}",
-            self.reset_link(token)
-        );
+        println!("PASSWORD RESET EMAIL to {to}: {}", self.reset_link(token));
         Ok(())
     }
 
@@ -56,52 +54,49 @@ impl EmailService for StdoutEmailProvider {
 }
 
 #[derive(Debug, Clone)]
-pub struct SendgridEmailProvider {
-    client: Client,
-    api_key: String,
+pub struct SesEmailProvider {
+    client: SesClient,
     frontend_url: String,
     from_email: String,
 }
 
-impl SendgridEmailProvider {
-    pub fn new(api_key: String, frontend_url: String) -> Self {
+impl SesEmailProvider {
+    pub fn new(client: SesClient, frontend_url: String, from_email: String) -> Self {
         Self {
-            client: Client::new(),
-            api_key,
+            client,
             frontend_url,
-            from_email: "no-reply@example.com".to_string(),
+            from_email,
         }
     }
 
     async fn send_email(&self, to: &str, subject: &str, content: &str) -> Result<(), String> {
-        let body = serde_json::json!({
-            "personalizations": [{
-                "to": [{ "email": to }]
-            }],
-            "from": { "email": self.from_email },
-            "subject": subject,
-            "content": [{
-                "type": "text/plain",
-                "value": content
-            }]
-        });
+        let dest = Destination::builder().to_addresses(to).build();
+        let subject_content = Content::builder().data(subject).charset("UTF-8").build().map_err(|e| e.to_string())?;
+        let body_content = Content::builder().data(content).charset("UTF-8").build().map_err(|e| e.to_string())?;
+        let body = Body::builder().text(body_content).build();
+
+        let message = Message::builder()
+            .subject(subject_content)
+            .body(body)
+            .build();
+
+        let email_content = EmailContent::builder().simple(message).build();
 
         self.client
-            .post("https://api.sendgrid.com/v3/mail/send")
-            .bearer_auth(&self.api_key)
-            .json(&body)
+            .send_email()
+            .from_email_address(&self.from_email)
+            .destination(dest)
+            .content(email_content)
             .send()
             .await
-            .map_err(|e| format!("sendgrid request failed: {e}"))?
-            .error_for_status()
-            .map_err(|e| format!("sendgrid returned error status: {e}"))?;
+            .map_err(|e| format!("SES request failed: {e}"))?;
 
         Ok(())
     }
 }
 
 #[async_trait]
-impl EmailService for SendgridEmailProvider {
+impl EmailService for SesEmailProvider {
     async fn send_password_reset_email(&self, to: &str, token: &str) -> Result<(), String> {
         let reset_link = format!("{}/reset-password?token={token}", self.frontend_url);
         let content = format!("Reset your password using this link: {reset_link}");
@@ -116,9 +111,8 @@ impl EmailService for SendgridEmailProvider {
         group_name: &str,
     ) -> Result<(), String> {
         let join_link = format!("{}/join?token={token}", self.frontend_url);
-        let content = format!(
-            "You were invited to join {group_name}. Use this link to join: {join_link}"
-        );
+        let content =
+            format!("You were invited to join {group_name}. Use this link to join: {join_link}");
 
         self.send_email(to, "You're Invited", &content).await
     }

@@ -1,8 +1,9 @@
-use backend::email::{EmailService, SendgridEmailProvider, StdoutEmailProvider};
+use backend::email::{EmailService, SesEmailProvider, StdoutEmailProvider};
 use backend::{AppState, WsMessage, build_app};
 use serde::Deserialize;
-use sqlx::postgres::PgPoolOptions;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast;
@@ -34,14 +35,12 @@ fn default_email_provider() -> String {
     "stdout".to_string()
 }
 
-fn default_frontend_url() -> String {
-    "http://localhost:5173".to_string()
-}
-
 #[derive(Debug, Deserialize, Clone)]
 struct Config {
     #[serde(rename = "DATABASE_URL")]
     database_url: String,
+    #[serde(rename = "DOMAIN")]
+    domain: String,
     #[serde(rename = "DB_MAX_CONNECTIONS", default = "default_db_max_connections")]
     db_max_connections: u32,
     #[serde(rename = "RUN_MIGRATIONS", default = "default_run_migrations")]
@@ -62,15 +61,29 @@ struct Config {
     port: u16,
     #[serde(rename = "EMAIL_PROVIDER", default = "default_email_provider")]
     email_provider: String,
-    #[serde(rename = "SENDGRID_API_KEY")]
-    sendgrid_api_key: Option<String>,
-    #[serde(rename = "FRONTEND_URL", default = "default_frontend_url")]
-    frontend_url: String,
+    #[serde(rename = "EMAIL_FROM_ADDRESS")]
+    email_from_address: Option<String>,
+    #[serde(rename = "AWS_REGION")]
+    aws_region: Option<String>,
+    #[serde(rename = "FRONTEND_URL")]
+    frontend_url: Option<String>,
 }
 
 impl Config {
     fn from_env() -> Result<Self, String> {
         envy::from_env::<Config>().map_err(|e| format!("Failed to load config from env: {e}"))
+    }
+
+    fn get_email_from_address(&self) -> String {
+        self.email_from_address
+            .clone()
+            .unwrap_or_else(|| format!("no-reply@{}", self.domain))
+    }
+
+    fn get_frontend_url(&self) -> String {
+        self.frontend_url
+            .clone()
+            .unwrap_or_else(|| format!("https://{}", self.domain))
     }
 }
 
@@ -84,11 +97,15 @@ async fn main() {
 
     let config = Config::from_env().expect("configuration error");
 
+    let connect_options = PgConnectOptions::from_str(&config.database_url)
+        .expect("Invalid DATABASE_URL")
+        .statement_cache_capacity(0);
+
     let pool = PgPoolOptions::new()
         .max_connections(config.db_max_connections)
         .idle_timeout(Some(Duration::from_secs(config.db_idle_timeout_seconds)))
         .max_lifetime(Some(Duration::from_secs(config.db_max_lifetime_seconds)))
-        .connect(&config.database_url)
+        .connect_with(connect_options)
         .await
         .expect("Failed to connect to Postgres");
 
@@ -102,16 +119,18 @@ async fn main() {
 
     let (tx, _rx) = broadcast::channel::<WsMessage>(WS_CHANNEL_CAPACITY);
 
+    let from_email = config.get_email_from_address();
+    let frontend_url = config.get_frontend_url();
+
     let email_service: Arc<dyn EmailService> = match config.email_provider.as_str() {
-        "stdout" => Arc::new(StdoutEmailProvider::new(config.frontend_url.clone())),
-        "sendgrid" => {
-            let api_key = config
-                .sendgrid_api_key
-                .clone()
-                .expect("SENDGRID_API_KEY must be set when EMAIL_PROVIDER=sendgrid");
-            Arc::new(SendgridEmailProvider::new(
-                api_key,
-                config.frontend_url.clone(),
+        "stdout" => Arc::new(StdoutEmailProvider::new(frontend_url)),
+        "ses" => {
+            let shared_config = aws_config::load_from_env().await;
+            let ses_client = aws_sdk_sesv2::Client::new(&shared_config);
+            Arc::new(SesEmailProvider::new(
+                ses_client,
+                frontend_url,
+                from_email,
             ))
         }
         other => panic!("Unsupported EMAIL_PROVIDER: {other}"),
