@@ -48,6 +48,8 @@
   $: completedPlannedMinutes = tasks
     .filter((task) => task.status === 'done')
     .reduce((acc, task) => acc + Number(task.total_duration_minutes || 0), 0);
+  $: completedTasks = tasks.filter((task) => task.status === 'done').length;
+  $: progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   $: selectedDateLabel = selectedDate
     ? new Date(`${selectedDate}T00:00:00`).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' })
@@ -185,41 +187,55 @@
   }
 </script>
 
-<section class="mb-1.5 rounded-xl border border-slate-300 bg-white shadow-sm overflow-hidden">
-  <div class="border-b border-slate-200 bg-slate-100/70 px-4 py-3">
-    <div class="flex flex-wrap items-center justify-between gap-2">
+<section class="mb-1.5 overflow-hidden rounded-2xl border border-[var(--border-base)] bg-[var(--surface-primary)] shadow-[var(--shadow-elevated)]">
+  <div class="border-b border-[var(--border-base)] bg-[color:color-mix(in_srgb,var(--surface-secondary)_82%,transparent)] px-5 py-4">
+    <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h3 class="text-[13px] font-black uppercase tracking-tight text-slate-900">
+        <h3 class="text-[14px] font-black uppercase tracking-tight text-[var(--text-primary)]">
           本日フォーカス
         </h3>
-        <p class="text-[11px] font-bold text-slate-600">
+        <p class="text-[11px] font-semibold text-[var(--text-muted)]">
           本日（{selectedDateLabel}）のサマリー
         </p>
       </div>
       <div class="flex items-center gap-2">
-        <div class="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5">
-          <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500">合計タスク</div>
-          <div class="text-[14px] font-black text-slate-900 leading-none mt-0.5">{totalTasks}</div>
+        <div class="rounded-xl border border-[var(--border-base)] bg-[var(--surface-primary)] px-3 py-2">
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">合計タスク</div>
+          <div class="mt-0.5 text-[14px] font-black leading-none text-[var(--text-primary)]">{totalTasks}</div>
         </div>
-        <div class="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5">
-          <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500">完了予定時間</div>
-          <div class="text-[14px] font-black text-blue-700 leading-none mt-0.5">{formatMinutes(completedPlannedMinutes)}</div>
+        <div class="rounded-xl border border-[var(--border-base)] bg-[var(--surface-primary)] px-3 py-2">
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">完了予定時間</div>
+          <div class="mt-0.5 text-[14px] font-black leading-none text-blue-600">{formatMinutes(completedPlannedMinutes)}</div>
         </div>
-        <div class="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5">
-          <div class="text-[10px] font-bold uppercase tracking-wide text-red-600">遅延</div>
-          <div class="text-[14px] font-black text-red-700 leading-none mt-0.5">{overdueTasks.length}</div>
+        <div class="rounded-xl border border-red-300/60 bg-red-100/50 px-3 py-2 dark:border-red-800/70 dark:bg-red-950/30">
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:text-red-300">遅延</div>
+          <div class="mt-0.5 text-[14px] font-black leading-none text-red-700 dark:text-red-200">{overdueTasks.length}</div>
         </div>
       </div>
     </div>
 
-    <div class="mt-2.5 flex flex-wrap items-center gap-2">
-      <label class="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-700">
+    <div class="mt-3.5 space-y-2">
+      <div>
+        <div class="mb-1.5 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+          <span>進捗</span>
+          <span>{completedTasks} / {totalTasks}（{progressPercent}%）</span>
+        </div>
+        <div class="h-2 overflow-hidden rounded-full bg-[color:color-mix(in_srgb,var(--surface-primary)_88%,var(--border-base)_12%)]">
+          <div
+            class="h-full rounded-full bg-gradient-to-r from-blue-500 to-teal-400 transition-all duration-300"
+            style={`width: ${progressPercent}%`}
+          ></div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+      <label class="inline-flex items-center gap-1.5 text-[10px] font-semibold text-[var(--text-primary)]">
         <input type="checkbox" bind:checked={syncWithTimelineSelection} class="h-3.5 w-3.5 accent-blue-600" />
         タイムライン選択者に連動
       </label>
       {#if !syncWithTimelineSelection}
         <select
-          class="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-bold text-slate-700 outline-none focus:border-blue-400"
+          class="form-control rounded-lg px-2 py-1 text-[11px] font-semibold focus:ring-2"
           value={manualMemberIdFilter ? String(manualMemberIdFilter) : ''}
           on:change={(event) => {
             const value = (event.currentTarget as HTMLSelectElement).value;
@@ -232,7 +248,7 @@
           {/each}
         </select>
       {:else}
-        <div class="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700">
+        <div class="rounded-lg border border-blue-300/70 bg-blue-100/50 px-2 py-1 text-[10px] font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200">
           {#if selectedTimelineMemberId}
             対象: {memberNameMap[selectedTimelineMemberId] || `Member #${selectedTimelineMemberId}`}
           {:else}
@@ -240,51 +256,52 @@
           {/if}
         </div>
       {/if}
+      </div>
     </div>
   </div>
 
-  <div class="px-4 py-3">
+  <div class="px-5 py-4">
     {#if loading}
-      <div class="text-[12px] font-semibold text-slate-500">読み込み中...</div>
+      <div class="text-[12px] font-semibold text-[var(--text-muted)]">読み込み中...</div>
     {:else if error}
-      <div class="text-[12px] font-semibold text-red-600">{error}</div>
+      <div class="text-[12px] font-semibold text-red-600 dark:text-red-300">{error}</div>
     {:else if groupedTasks.length === 0}
-      <div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-[12px] font-semibold text-slate-500">
+      <div class="rounded-xl border border-dashed border-[var(--border-base)] bg-[var(--surface-secondary)] px-3 py-5 text-center text-[12px] font-semibold text-[var(--text-muted)]">
         該当するタスクはありません。
       </div>
     {:else}
-      <div class="grid gap-2 md:grid-cols-3">
+      <div class="grid gap-3 md:grid-cols-3">
         {#each groupedTasks as group}
-          <div class="rounded-lg border border-slate-300 bg-white">
-            <div class="flex items-center gap-1.5 border-b border-slate-200 px-2.5 py-2">
+          <div class="rounded-2xl border border-[var(--border-base)] bg-[var(--surface-primary)]">
+            <div class="flex items-center gap-1.5 border-b border-[var(--border-base)] px-3 py-2.5">
               <span class="h-2 w-2 rounded-full {statusDotClass[group.status]}"></span>
-              <h4 class="text-[11px] font-black uppercase tracking-tight text-slate-800">
+              <h4 class="text-[11px] font-black uppercase tracking-tight text-[var(--text-primary)]">
                 {group.label}
               </h4>
-              <span class="ml-auto text-[10px] font-bold text-slate-500">{group.items.length}</span>
+              <span class="ml-auto text-[10px] font-semibold text-[var(--text-muted)]">{group.items.length}</span>
             </div>
-            <div class="max-h-56 overflow-y-auto p-1.5">
-              <div class="space-y-1.5">
+            <div class="scrollbar-hide max-h-56 overflow-y-auto p-2">
+              <div class="space-y-2">
                 {#each group.items as task (task.id)}
-                  <article class="w-full rounded-lg border px-2.5 py-2 text-left transition-colors {isOverdue(task) ? 'border-red-300 bg-red-50/60' : 'border-slate-200 bg-slate-50/70 hover:border-slate-300 hover:bg-white'}">
+                  <article class="w-full rounded-xl border px-3 py-2.5 text-left transition-all {isOverdue(task) ? 'border-red-300/70 bg-red-100/45 dark:border-red-800 dark:bg-red-950/35' : 'border-[var(--border-base)] bg-[var(--surface-secondary)] hover:border-[var(--border-strong)]'}">
                     <button type="button" class="w-full text-left" on:click={() => openTask(task)}>
                       <div class="flex items-start justify-between gap-2">
-                        <div class="line-clamp-2 text-[12px] font-black text-slate-900">{task.title}</div>
+                        <div class="line-clamp-2 text-[12px] font-extrabold text-[var(--text-primary)]">{task.title}</div>
                         {#if isOverdue(task)}
-                          <span class="shrink-0 rounded border border-red-300 bg-red-100 px-1.5 py-0.5 text-[9px] font-black text-red-700">遅延</span>
+                          <span class="shrink-0 rounded border border-red-300/70 bg-red-100/70 px-1.5 py-0.5 text-[9px] font-black text-red-700 dark:border-red-800 dark:bg-red-950/45 dark:text-red-200">遅延</span>
                         {/if}
                       </div>
                       {#if getTaskDescription(task)}
-                        <div class="mt-1 line-clamp-2 text-[10px] font-medium text-slate-600">
+                        <div class="mt-1 line-clamp-2 text-[10px] font-medium text-[var(--text-muted)]">
                           {getTaskDescription(task)}
                         </div>
                       {/if}
                     </button>
-                    <div class="mt-1 text-[10px] font-semibold text-slate-600">
+                    <div class="mt-1 text-[10px] font-semibold text-[var(--text-muted)]">
                       担当: {memberNameMap[task.member_id] || `Member #${task.member_id}`}
                     </div>
                     {#if isOverdue(task)}
-                      <div class="mt-0.5 text-[10px] font-semibold text-red-700">
+                      <div class="mt-0.5 text-[10px] font-semibold text-red-700 dark:text-red-300">
                         予定終了: {formatDateTime(task.end_at)}
                       </div>
                     {/if}
@@ -292,15 +309,15 @@
                       <div class="flex min-w-0 flex-wrap gap-1">
                         {#if task.tags && task.tags.length > 0}
                           {#each task.tags.slice(0, 3) as tag}
-                            <span class="max-w-24 truncate rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
+                            <span class="max-w-24 truncate rounded-md border border-[var(--border-base)] bg-[var(--surface-primary)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-muted)]">
                               #{tag}
                             </span>
                           {/each}
                         {:else}
-                          <span class="text-[10px] text-slate-400">タグなし</span>
+                          <span class="text-[10px] text-[var(--text-muted)]/80">タグなし</span>
                         {/if}
                       </div>
-                      <span class="shrink-0 text-[10px] font-black text-slate-600">
+                      <span class="shrink-0 text-[10px] font-black text-[var(--text-muted)]">
                         予定 {formatMinutes(task.total_duration_minutes)}
                       </span>
                     </div>
@@ -308,7 +325,7 @@
                       <button
                         type="button"
                         disabled={task.status === 'doing' || updatingTaskIds.has(task.id)}
-                        class="rounded-md border px-2 py-1 text-[10px] font-black transition-colors disabled:cursor-not-allowed disabled:opacity-50 {task.status === 'doing' ? 'border-blue-500 bg-blue-600 text-white' : 'border-blue-200 bg-white text-blue-700 hover:bg-blue-50'}"
+                        class="rounded-lg border px-2.5 py-1 text-[10px] font-black transition-all disabled:cursor-not-allowed disabled:opacity-50 {task.status === 'doing' ? 'border-blue-600 bg-blue-600 text-white' : 'border-blue-300/60 bg-blue-100/45 text-blue-700 hover:brightness-105 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200'}"
                         on:click={() => updateTaskStatus(task, 'doing')}
                       >
                         進行中
@@ -316,13 +333,13 @@
                       <button
                         type="button"
                         disabled={task.status === 'done' || updatingTaskIds.has(task.id)}
-                        class="rounded-md border px-2 py-1 text-[10px] font-black transition-colors disabled:cursor-not-allowed disabled:opacity-50 {task.status === 'done' ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50'}"
+                        class="rounded-lg border px-2.5 py-1 text-[10px] font-black transition-all disabled:cursor-not-allowed disabled:opacity-50 {task.status === 'done' ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-emerald-300/70 bg-emerald-100/45 text-emerald-700 hover:brightness-105 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200'}"
                         on:click={() => updateTaskStatus(task, 'done')}
                       >
                         完了
                       </button>
                       {#if updatingTaskIds.has(task.id)}
-                        <span class="text-[10px] font-semibold text-slate-500">更新中...</span>
+                        <span class="text-[10px] font-semibold text-[var(--text-muted)]">更新中...</span>
                       {/if}
                     </div>
                   </article>

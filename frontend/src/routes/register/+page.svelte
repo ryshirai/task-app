@@ -7,6 +7,7 @@
     let username = '';
     let email = '';
     let password = '';
+    let showPassword = false;
     let error = '';
     let loading = false;
 
@@ -26,7 +27,7 @@
             }
 
             const data = await res.json();
-            auth.set({ token: data.token, user: data.user });
+            auth.set({ token: data.token, user: data.user, initialized: true });
             goto('/');
         } catch (e: any) {
             error = e.message;
@@ -36,45 +37,62 @@
     }
 </script>
 
-<div class="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-    <div class="max-w-md w-full p-8 bg-white rounded-2xl shadow-xl border border-slate-200">
-        <h1 class="text-3xl font-black text-slate-800 mb-1 text-center tracking-tighter">GlanceFlow</h1>
-        <p class="text-slate-500 text-xs text-center mb-6 uppercase tracking-widest font-bold">New Workspace</p>
+<div class="auth-shell flex items-center justify-center p-4">
+    <div class="auth-card w-full max-w-md p-8">
+        <div class="mb-6 text-center">
+            <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 text-xl font-black text-white shadow-lg shadow-blue-500/25">G</div>
+            <h1 class="mb-1 text-3xl font-black tracking-tight text-[var(--text-primary)]">GlanceFlow</h1>
+            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">New Workspace</p>
+        </div>
         
         <form on:submit|preventDefault={handleRegister} class="space-y-4">
             <div>
-                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">組織名</label>
-                <input bind:value={organization_name} required class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-50 text-sm" placeholder="組織名を入力してください" />
+                <label for="organization-name" class="mb-1.5 ml-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">組織名</label>
+                <input id="organization-name" bind:value={organization_name} required class="form-control px-4 py-2.5 text-sm focus:ring-2 transition-all" placeholder="組織名を入力してください" />
             </div>
             
-            <div class="pt-4 border-t border-slate-100">
-                <h2 class="text-[10px] font-bold text-slate-400 uppercase mb-3 ml-1 tracking-widest">管理者アカウント設定</h2>
+            <div class="border-t border-[var(--border-base)] pt-4">
+                <h2 class="mb-3 ml-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">管理者アカウント設定</h2>
                 <div class="space-y-3">
-                    <input bind:value={admin_name} required class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="お名前" />
+                    <input bind:value={admin_name} required class="form-control px-4 py-2.5 text-sm focus:ring-2 transition-all" placeholder="お名前" />
                     <div>
-                        <input bind:value={username} required pattern="^[a-zA-Z0-9_-]+$" class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="ユーザー名 (ログイン用)" />
-                        <p class="text-[9px] text-slate-400 mt-1 ml-1">※半角英数字、_、- が使用可能です</p>
+                        <input bind:value={username} required pattern="^[a-zA-Z0-9_-]+$" class="form-control px-4 py-2.5 text-sm focus:ring-2 transition-all" placeholder="ユーザー名 (ログイン用)" />
+                        <p class="ml-1 mt-1 text-[9px] text-[var(--text-muted)]">※半角英数字、_、- が使用可能です</p>
                     </div>
-                    <input type="email" bind:value={email} required class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="メールアドレス" />
-                    <input type="password" bind:value={password} required class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="パスワード" />
+                    <input type="email" bind:value={email} required class="form-control px-4 py-2.5 text-sm focus:ring-2 transition-all" placeholder="メールアドレス" />
+                    <div class="relative">
+                        <input type={showPassword ? 'text' : 'password'} bind:value={password} required class="form-control px-4 py-2.5 pr-10 text-sm focus:ring-2 transition-all" placeholder="パスワード" />
+                        <button
+                            type="button"
+                            class="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
+                            aria-label={showPassword ? 'パスワードを隠す' : 'パスワードを表示'}
+                            on:click={() => (showPassword = !showPassword)}
+                        >
+                            {#if showPassword}
+                                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.58 10.58a2 2 0 1 0 2.83 2.83"></path><path d="M9.88 4.24A10.94 10.94 0 0 1 12 4c7 0 10 8 10 8a17.22 17.22 0 0 1-2.17 3.19"></path><path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 8 10 8a10.94 10.94 0 0 0 5.76-1.62"></path><line x1="2" y1="2" x2="22" y2="22"></line></svg>
+                            {:else}
+                                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.06 12a11 11 0 0 1 19.88 0 11 11 0 0 1-19.88 0z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            {/if}
+                        </button>
+                    </div>
                 </div>
             </div>
             
             {#if error}
-                <p class="text-red-500 text-xs mt-2">{error}</p>
+                <p class="mt-2 text-xs text-red-500 dark:text-red-300">{error}</p>
             {/if}
             
             <button
                 type="submit"
                 disabled={loading}
-                class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors shadow-lg shadow-blue-100 disabled:opacity-50"
+                class="btn-primary w-full py-3 text-sm"
             >
                 {loading ? '作成中...' : '組織を作成して開始'}
             </button>
         </form>
 
         <div class="mt-6 text-center">
-            <a href="/" class="text-xs text-blue-600 hover:underline">ログイン画面に戻る</a>
+            <a href="/" class="text-xs font-semibold text-blue-600 hover:brightness-110">ログイン画面に戻る</a>
         </div>
     </div>
 </div>

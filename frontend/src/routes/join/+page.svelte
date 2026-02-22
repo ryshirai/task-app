@@ -51,7 +51,7 @@
             }
 
             const data = await res.json();
-            auth.set({ token: data.token, user: data.user });
+            auth.set({ token: data.token, user: data.user, initialized: true });
             goto('/');
         } catch (e: any) {
             error = e.message;
@@ -61,35 +61,42 @@
     }
 </script>
 
-<div class="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-    <div class="max-w-md w-full p-8 bg-white rounded-2xl shadow-xl border border-slate-200">
+<div class="auth-shell flex items-center justify-center p-4">
+    <div class="auth-card w-full max-w-md p-8">
         {#if loading}
-            <div class="text-center text-slate-400 py-10 animate-pulse font-bold text-lg">招待を確認中...</div>
+            <div class="py-10 text-center text-lg font-bold text-[var(--text-muted)] animate-pulse">招待を確認中...</div>
         {:else if error}
             <div class="text-center">
-                <div class="text-red-500 font-bold mb-4">{error}</div>
-                <a href="/" class="text-blue-600 hover:underline text-sm">トップページへ</a>
+                <div class="mb-4 font-bold text-red-500 dark:text-red-300">{error}</div>
+                <a href="/" class="text-sm font-semibold text-blue-600 hover:brightness-110">トップページへ</a>
             </div>
         {:else}
-            <h1 class="text-2xl font-bold text-slate-800 mb-1 text-center">GlanceFlow</h1>
-            <p class="text-slate-500 text-xs text-center mb-4">
-                <span class="font-bold text-blue-600">{invitation?.org_name ?? '組織'}</span> への招待
-            </p>
-            <p class="text-slate-400 text-[10px] text-center mb-6 uppercase tracking-widest font-bold">アカウントを作成して参加しましょう</p>
+            <div class="mb-6 text-center">
+                <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 text-xl font-black text-white shadow-lg shadow-blue-500/25">G</div>
+                <h1 class="mb-1 text-2xl font-black tracking-tight text-[var(--text-primary)]">GlanceFlow</h1>
+                <p class="text-xs text-[var(--text-muted)]">
+                    <span class="font-bold text-blue-600">{invitation?.org_name ?? '組織'}</span> への招待
+                </p>
+                <p class="mt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">アカウントを作成して参加しましょう</p>
+            </div>
             
             <form on:submit|preventDefault={handleJoin} class="space-y-4">
-                <input bind:value={name} required class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="表示名 (例: 山田太郎)" />
+                <input bind:value={name} required class="form-control px-4 py-2.5 text-sm focus:ring-2 transition-all" placeholder="表示名 (例: 山田太郎)" />
                 <div>
-                    <input bind:value={username} required pattern="^[a-zA-Z0-9_-]+$" class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="ユーザー名 (英数字・ハイフン・アンダースコア)" />
-                    <p class="text-[9px] text-slate-400 mt-1 ml-1">※半角英数字、_、- が使用可能です</p>
+                    <input bind:value={username} required pattern="^[a-zA-Z0-9_-]+$" class="form-control px-4 py-2.5 text-sm focus:ring-2 transition-all" placeholder="ユーザー名 (英数字・ハイフン・アンダースコア)" />
+                    <p class="ml-1 mt-1 text-[9px] text-[var(--text-muted)]">※半角英数字、_、- が使用可能です</p>
                 </div>
-                <input type="email" bind:value={email} required class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="メールアドレス" />
-                <input type="password" bind:value={password} required class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="パスワード" />
+                <input type="email" bind:value={email} required class="form-control px-4 py-2.5 text-sm focus:ring-2 transition-all" placeholder="メールアドレス" />
+                <input type="password" bind:value={password} required class="form-control px-4 py-2.5 text-sm focus:ring-2 transition-all" placeholder="パスワード" />
+
+                {#if error}
+                    <p class="text-xs text-red-500 dark:text-red-300">{error}</p>
+                {/if}
                 
                 <button
                     type="submit"
                     disabled={joining}
-                    class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors shadow-lg shadow-blue-100 disabled:opacity-50"
+                    class="btn-primary w-full py-3 text-sm"
                 >
                     {joining ? '参加中...' : 'アカウントを作成して参加'}
                 </button>

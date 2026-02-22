@@ -88,7 +88,7 @@
       });
 
       if (!res.ok) throw new Error('Failed to save report');
-      goto('/reports');
+      goto('/');
     } catch (e) {
       console.error(e);
       alert('日報の保存に失敗しました。');
@@ -106,19 +106,22 @@
   });
 </script>
 
-<div class="min-h-screen bg-slate-50 flex flex-col font-sans">
-  <header class="h-12 px-6 flex items-center justify-between bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10">
+{#if !$auth.initialized}
+  <div class="min-h-screen bg-surface-secondary text-text-muted flex items-center justify-center font-semibold">読み込み中...</div>
+{:else}
+<div class="min-h-screen bg-surface-secondary text-text-base flex flex-col font-sans">
+  <header class="h-12 px-6 flex items-center justify-between bg-surface-primary border-b border-border-base shadow-sm sticky top-0 z-10">
     <div class="flex items-center gap-4">
-      <button on:click={() => goto('/reports')} class="p-1.5 -ml-1.5 text-slate-400 hover:text-slate-600 transition-colors">
+      <button on:click={() => goto('/')} class="p-1.5 -ml-1.5 text-text-muted hover:text-text-base transition-colors" aria-label="ダッシュボードに戻る">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
       </button>
-      <h1 class="text-sm font-black text-slate-800 tracking-tight uppercase">日報作成</h1>
+      <h1 class="text-sm font-black text-text-base tracking-tight uppercase">日報作成</h1>
     </div>
     <div class="flex items-center gap-3">
         <button 
           on:click={saveReport} 
           disabled={loading || !content.trim()}
-          class="px-4 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg shadow-sm hover:bg-blue-700 transition-all disabled:opacity-50 active:scale-95"
+          class="btn-primary text-xs active:scale-95"
         >
           {loading ? '保存中...' : '日報を提出'}
         </button>
@@ -128,23 +131,24 @@
   <main class="max-w-[1200px] w-full mx-auto p-4 flex-1 flex flex-col md:flex-row gap-4 overflow-hidden">
     <!-- Editor Side -->
     <div class="flex-1 flex flex-col gap-4 min-w-0">
-      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col flex-1 min-h-[400px]">
+      <div class="bg-surface-primary p-4 rounded-2xl border border-border-base shadow-sm flex flex-col flex-1 min-h-[400px]">
         <div class="flex items-center justify-between mb-3">
-          <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest">内容 (Markdown)</label>
+          <label for="new-report-content" class="block text-[10px] font-bold text-text-muted uppercase tracking-widest">内容 (Markdown)</label>
           <div class="flex items-center gap-2">
-            <span class="text-[10px] font-bold text-slate-400 uppercase">対象日:</span>
+            <span class="text-[10px] font-bold text-text-muted uppercase">対象日:</span>
             <input 
               type="date" 
               bind:value={reportDate}
               on:change={fetchMyTasks}
-              class="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-bold outline-none"
+              class="form-control px-2 py-1 text-[10px] font-bold"
             />
           </div>
         </div>
         
         <textarea 
+          id="new-report-content"
           bind:value={content} 
-          class="flex-1 w-full p-4 border border-slate-100 rounded-xl focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none font-mono text-xs resize-none bg-slate-50/20 leading-relaxed"
+          class="form-control flex-1 p-4 font-mono text-xs resize-none leading-relaxed"
           placeholder="成果や課題を入力してください..."
         ></textarea>
       </div>
@@ -156,33 +160,33 @@
         <ReportPreview {content} />
       </div>
 
-      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex-1">
-        <h3 class="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-3 flex items-center gap-2">
+      <div class="bg-surface-primary p-4 rounded-2xl border border-border-base shadow-sm flex-1">
+        <h3 class="text-[10px] font-black text-text-base uppercase tracking-widest mb-3 flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-500"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
             タスク状況
         </h3>
         
         {#if tasksLoading}
-            <div class="py-2 text-center text-slate-400 text-[10px] animate-pulse font-bold uppercase tracking-widest">Loading...</div>
+            <div class="py-2 text-center text-text-muted text-[10px] animate-pulse font-bold uppercase tracking-widest">Loading...</div>
         {:else if userTasks.length === 0}
-            <div class="py-2 text-center text-slate-300 text-[10px] italic">本日のタスクなし</div>
+            <div class="py-2 text-center text-text-muted text-[10px] italic">本日のタスクなし</div>
         {:else}
             <div class="space-y-2 max-h-[200px] overflow-y-auto pr-1">
                 {#each userTasks as task}
-                    <div class="p-2 bg-slate-50 rounded-lg border border-slate-100">
+                    <div class="p-2 bg-surface-secondary rounded-lg border border-border-base">
                         <div class="flex items-center justify-between mb-1">
                             <span class="text-[8px] font-bold uppercase px-1 rounded {task.status === 'done' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}">
                                 {task.status === 'done' ? '完了' : '進行中'}
                             </span>
-                            <span class="text-[8px] font-black text-slate-400">{task.progress_rate}%</span>
+                            <span class="text-[8px] font-black text-text-muted">{task.progress_rate}%</span>
                         </div>
-                        <p class="text-[10px] font-bold text-slate-700 line-clamp-1">{task.title}</p>
+                        <p class="text-[10px] font-bold text-text-base line-clamp-1">{task.title}</p>
                     </div>
                 {/each}
             </div>
             <button 
                 on:click={generateTemplate}
-                class="w-full mt-3 py-1.5 border border-dashed border-slate-200 rounded text-[9px] font-bold text-slate-400 hover:text-blue-500 hover:border-blue-100 hover:bg-blue-50 transition-all"
+                class="btn-secondary w-full mt-3 py-1.5 border-dashed text-[9px]"
             >
                 テンプレートを適用
             </button>
@@ -191,3 +195,4 @@
     </div>
   </main>
 </div>
+{/if}

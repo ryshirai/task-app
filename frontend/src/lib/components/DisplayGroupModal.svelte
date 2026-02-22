@@ -112,13 +112,13 @@
 
 <dialog
   bind:this={dialog}
-  class="backdrop:bg-slate-900/50 p-0 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+  class="w-full max-w-lg overflow-hidden rounded-2xl p-0 shadow-2xl backdrop:bg-slate-900/50 animate-in fade-in zoom-in-95 duration-200"
   on:close={() => dispatch('close')}
 >
-  <div class="bg-white flex flex-col h-[600px]">
-    <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-      <h3 class="text-sm font-black text-slate-800 uppercase tracking-tight">表示グループ設定</h3>
-      <button type="button" on:click={() => dispatch('close')} class="text-slate-400 hover:text-slate-600 transition-colors" aria-label="表示グループ設定を閉じる">
+  <div class="flex h-[600px] flex-col bg-surface-primary text-text-base">
+    <div class="flex items-center justify-between border-b border-border-base bg-surface-secondary/70 px-6 py-4">
+      <h3 class="text-sm font-black uppercase tracking-tight text-text-base">表示グループ設定</h3>
+      <button type="button" on:click={() => dispatch('close')} class="text-text-muted transition-colors hover:text-text-base" aria-label="表示グループ設定を閉じる">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
@@ -127,28 +127,28 @@
       {#if showForm}
         <div class="space-y-6 animate-in slide-in-from-top-2 duration-200">
           <div>
-            <label for="display-group-name" class="block text-[10px] font-bold text-slate-500 uppercase mb-2">グループ名</label>
+            <label for="display-group-name" class="mb-2 block text-[10px] font-bold uppercase text-text-muted">グループ名</label>
             <input
               id="display-group-name"
               bind:value={name}
               placeholder="チームA, プロジェクトXなど..."
-              class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all"
+              class="w-full rounded-xl border border-border-base bg-surface-secondary px-3 py-2 text-xs font-bold text-text-base outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15"
             />
           </div>
 
           <div>
-            <p class="block text-[10px] font-bold text-slate-500 uppercase mb-2">メンバーを選択</p>
+            <p class="mb-2 block text-[10px] font-bold uppercase text-text-muted">メンバーを選択</p>
             <div class="grid grid-cols-2 gap-2">
               {#each members as member}
                 <button
                   type="button"
                   on:click={() => toggleMember(member.id)}
-                  class="flex items-center gap-2 p-2 rounded-lg border text-left transition-all {selectedMemberIds.includes(member.id) ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-200' : 'bg-white border-slate-100 hover:border-slate-200'}"
+                  class="flex items-center gap-2 rounded-lg border p-2 text-left transition-all {selectedMemberIds.includes(member.id) ? 'border-blue-300 bg-blue-500/15 ring-1 ring-blue-300' : 'border-border-base bg-surface-primary hover:border-border-strong'}"
                 >
-                  <div class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500 shrink-0">
+                  <div class="h-6 w-6 shrink-0 rounded-full bg-surface-muted text-[10px] font-bold text-text-muted flex items-center justify-center">
                     {member.name.charAt(0).toUpperCase()}
                   </div>
-                  <span class="text-[11px] font-bold text-slate-700 truncate">{member.name}</span>
+                  <span class="truncate text-[11px] font-bold text-text-base">{member.name}</span>
                   {#if selectedMemberIds.includes(member.id)}
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="ml-auto text-blue-500"><polyline points="20 6 9 17 4 12"/></svg>
                   {/if}
@@ -159,18 +159,18 @@
         </div>
 
         <!-- Fixed Footer for Form Actions -->
-        <div class="absolute bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-md border-t border-slate-100 flex gap-2">
+        <div class="absolute bottom-0 left-0 right-0 flex gap-2 border-t border-border-base bg-surface-primary/90 p-6 backdrop-blur-md">
           <button
             type="button"
             on:click={handleSave}
-            class="flex-1 bg-slate-900 text-white py-3 rounded-xl text-[11px] font-black hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 active:scale-95"
+            class="flex-1 rounded-xl bg-slate-900 py-2.5 text-[11px] font-black text-white transition-all hover:bg-slate-800 active:scale-95"
           >
             {editingGroupId ? '更新する' : '作成する'}
           </button>
           <button
             type="button"
             on:click={resetForm}
-            class="px-6 py-3 rounded-xl text-[11px] font-bold text-slate-500 hover:bg-slate-50 transition-all"
+            class="rounded-xl px-5 py-2.5 text-[11px] font-bold text-text-muted transition-all hover:bg-surface-secondary"
           >
             キャンセル
           </button>
@@ -178,7 +178,7 @@
       {:else}
         <div class="space-y-4">
           <div class="flex justify-between items-center">
-            <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">保存済みグループ</h4>
+            <h4 class="text-[10px] font-bold uppercase tracking-widest text-text-muted">保存済みグループ</h4>
             <button
               type="button"
               on:click={startCreate}
@@ -190,22 +190,22 @@
           </div>
 
           {#if groups.length === 0}
-            <div class="py-12 text-center border-2 border-dashed border-slate-100 rounded-2xl">
-              <p class="text-[11px] text-slate-400 font-bold">グループがまだありません</p>
+            <div class="rounded-2xl border-2 border-dashed border-border-base py-12 text-center">
+              <p class="text-[11px] font-bold text-text-muted">グループがまだありません</p>
             </div>
           {:else}
             <div class="space-y-2">
               {#each groups as group}
-                <div class="group flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-slate-200 hover:bg-slate-50/50 transition-all">
+                <div class="group flex items-center justify-between rounded-xl border border-border-base p-3 transition-all hover:border-border-strong hover:bg-surface-secondary/60">
                   <div>
-                    <div class="text-[12px] font-bold text-slate-800">{group.name}</div>
-                    <div class="text-[9px] font-bold text-slate-400 uppercase mt-0.5">{group.member_ids.length}人のメンバー</div>
+                    <div class="text-[12px] font-bold text-text-base">{group.name}</div>
+                    <div class="mt-0.5 text-[9px] font-bold uppercase text-text-muted">{group.member_ids.length}人のメンバー</div>
                   </div>
                   <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       type="button"
                       on:click={() => startEdit(group)}
-                      class="p-1.5 text-slate-400 hover:text-blue-500 transition-colors"
+                      class="p-1.5 text-text-muted transition-colors hover:text-blue-500"
                       title="編集"
                       aria-label="グループを編集"
                     >
@@ -214,7 +214,7 @@
                     <button
                       type="button"
                       on:click={() => handleDelete(group.id)}
-                      class="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
+                      class="p-1.5 text-text-muted transition-colors hover:text-red-500"
                       title="削除"
                       aria-label="グループを削除"
                     >
@@ -229,8 +229,8 @@
       {/if}
     </div>
 
-    <div class="px-6 py-4 border-t border-slate-50 bg-slate-50/30">
-      <p class="text-[10px] text-slate-400 leading-relaxed font-medium">
+    <div class="border-t border-border-base bg-surface-secondary/50 px-6 py-4">
+      <p class="text-[10px] font-medium leading-relaxed text-text-muted">
         グループを作成すると、タイムラインの表示を特定のメンバーのみに素早く切り替えることができます。
       </p>
     </div>

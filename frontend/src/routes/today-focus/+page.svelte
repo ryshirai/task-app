@@ -100,35 +100,37 @@
   }
 </script>
 
-{#if !$auth.token}
+{#if !$auth.initialized}
+  <div class="min-h-screen bg-surface-primary text-text-muted flex items-center justify-center font-semibold">読み込み中...</div>
+{:else if !$auth.token}
   <Login on:loginSuccess={fetchDisplayGroups} />
 {:else}
-  <div class="min-h-screen bg-slate-50 flex flex-col font-sans">
-    <header class="h-12 px-4 sm:px-6 flex items-center justify-between bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10">
-      <button on:click={() => goto('/')} class="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-700 text-sm font-semibold">
+  <div class="min-h-screen bg-surface-primary text-text-base flex flex-col font-sans">
+    <header class="h-12 px-4 sm:px-6 flex items-center justify-between bg-surface-secondary border-b border-border-base shadow-sm sticky top-0 z-10">
+      <button on:click={() => goto('/')} class="inline-flex items-center gap-1.5 text-text-muted hover:text-text-base text-sm font-semibold">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
         戻る
       </button>
-      <h1 class="text-sm sm:text-base font-black text-slate-800 tracking-tight">本日のフォーカス</h1>
+      <h1 class="text-sm sm:text-base font-black text-text-base tracking-tight">本日のフォーカス</h1>
       <div class="w-10"></div>
     </header>
 
     <main class="max-w-6xl w-full mx-auto p-4 sm:p-6 flex-1">
-      <section class="mb-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+      <section class="mb-3 rounded-xl border border-border-base bg-surface-secondary p-3 shadow-sm">
         <div class="flex flex-wrap items-center gap-2">
           <input
             type="date"
             bind:value={selectedDate}
-            class="rounded border border-slate-300 px-2 py-1.5 text-xs font-semibold text-slate-700"
+            class="form-control w-auto rounded px-2 py-1.5 text-xs font-semibold"
           />
           <input
             type="text"
             bind:value={filterText}
             placeholder="絞り込み..."
-            class="rounded border border-slate-300 px-2.5 py-1.5 text-xs text-slate-700 w-52"
+            class="form-control w-52 rounded px-2.5 py-1.5 text-xs"
           />
           <select
-            class="rounded border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
+            class="form-control w-auto rounded px-2.5 py-1.5 text-xs font-semibold"
             value={selectedGroupId ? String(selectedGroupId) : ''}
             on:change={(event) => {
               const value = (event.currentTarget as HTMLSelectElement).value;
@@ -143,7 +145,7 @@
           <button
             type="button"
             on:click={fetchDisplayGroups}
-            class="rounded border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-100"
+            class="btn-secondary rounded px-2.5 py-1.5 text-[11px] font-bold"
           >
             グループ再読み込み
           </button>

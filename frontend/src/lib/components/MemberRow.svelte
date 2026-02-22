@@ -8,6 +8,9 @@
   export let member: User;
   export let baseDate: Date;
   export let isAdmin = false;
+  const hourCount = 10;
+  const hourSegments = hourCount - 1;
+  const quarterOffsets = [15, 30, 45];
   const dispatch = createEventDispatcher();
 
   function handleSelect(event: CustomEvent<{ start: Date; end: Date }>) {
@@ -17,49 +20,24 @@
     });
   }
 
-  // Workload calculation
-  $: activeTimeLogs = (member.time_logs || []).filter((timeLog) => timeLog.task_status !== 'done');
-  $: hasOverlap = activeTimeLogs.some((t1, i) => 
-    activeTimeLogs.some((t2, j) => 
-      i !== j && 
-      new Date(t1.start_at) < new Date(t2.end_at) && 
-      new Date(t2.start_at) < new Date(t1.end_at)
-    )
-  );
-  
-  type LoadLevel = 'overload' | 'high' | 'moderate' | 'low';
-  
-  $: loadLevel = (() => {
-    if (hasOverlap) return 'overload';
-    if (activeTimeLogs.length >= 3) return 'high';
-    if (activeTimeLogs.length >= 1) return 'moderate';
-    return 'low';
-  })() as LoadLevel;
-
-  const loadConfig: Record<LoadLevel, { label: string; color: string }> = {
-    overload: { label: '集中', color: 'text-red-600 bg-red-50 border-red-100 shadow-[0_0_8px_rgba(239,68,68,0.2)]' },
-    high: { label: '多忙', color: 'text-orange-600 bg-orange-50 border-orange-100' },
-    moderate: { label: '稼働中', color: 'text-blue-600 bg-blue-50 border-blue-100' },
-    low: { label: '余裕', color: 'text-slate-400 bg-slate-50 border-slate-100' }
-  };
 </script>
 
-<div class="flex border-b border-slate-100 group bg-white hover:bg-slate-50/50 transition-colors even:bg-slate-50/80">
-  <div class="w-40 px-3 h-10 flex items-center border-r border-slate-100 shrink-0 z-10 relative shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+<div class="group flex border-b border-[var(--color-border)] bg-[color:color-mix(in_srgb,var(--color-surface)_90%,var(--color-bg)_10%)] transition-colors hover:bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_94%,transparent)] even:bg-[color:color-mix(in_srgb,var(--color-surface)_84%,var(--color-bg)_16%)]">
+  <div class="relative z-10 flex h-10 w-40 shrink-0 items-center border-r border-[var(--color-border)] px-3 shadow-[2px_0_7px_-4px_rgba(15,23,42,0.4)]">
     {#if member.avatar_url}
-      <img src={member.avatar_url} alt={member.name} class="w-6 h-6 rounded-full mr-2 border border-slate-100 shadow-sm object-cover" />
+      <img src={member.avatar_url} alt={member.name} class="mr-2 h-6 w-6 rounded-full border border-[var(--color-border)] object-cover shadow-sm" />
     {:else}
-      <div class="w-6 h-6 rounded-full mr-2 bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500 border border-slate-200 shadow-inner shrink-0">
+      <div class="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface-elevated)] to-[color:color-mix(in_srgb,var(--color-surface-elevated)_62%,var(--color-border)_38%)] text-[10px] font-bold text-[var(--color-muted)] shadow-inner">
         {member.name.charAt(0).toUpperCase()}
       </div>
     {/if}
     <div class="flex flex-col min-w-0 flex-1">
         <div class="flex items-center gap-1 min-w-0">
-          <span class="font-bold text-slate-700 truncate text-[11px] leading-tight">{member.name}</span>
+          <span class="truncate text-[11px] font-bold leading-tight text-[var(--color-text)]">{member.name}</span>
           {#if isAdmin}
             <button
               on:click={() => goto(`/analytics?user_id=${member.id}`)}
-              class="shrink-0 p-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              class="shrink-0 rounded p-0.5 text-[var(--color-muted)] transition-colors hover:bg-[color:color-mix(in_srgb,var(--color-surface)_82%,transparent)] hover:text-[var(--color-text)]"
               title="分析を表示"
               aria-label={`${member.name}の分析を表示`}
             >
@@ -67,21 +45,22 @@
             </button>
           {/if}
         </div>
-        <div class="flex items-center gap-1 mt-0.5">
-            <span class="px-1 py-0.5 rounded-[3px] text-[7px] font-black uppercase border {loadConfig[loadLevel].color} transition-all duration-300">
-                {loadConfig[loadLevel].label}
-            </span>
-            {#if activeTimeLogs.length > 0}
-                <span class="text-[8px] text-slate-400 font-bold">{activeTimeLogs.length}件</span>
-            {/if}
-        </div>
     </div>
   </div>
 
-  <div class="flex-1 relative h-10 bg-slate-50/20">
+  <div class="relative h-10 flex-1 bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_26%,transparent)]">
     <!-- Grid lines for each hour -->
-    {#each Array(10) as _, i}
-      <div class="absolute top-0 bottom-0 border-l border-slate-200" style="left: {i * (100 / 9)}%;"></div>
+    {#each Array(hourCount) as _, i}
+      <div class="absolute top-0 bottom-0 border-l-2 border-[var(--color-border)] opacity-75" style="left: {i * (100 / hourSegments)}%;"></div>
+    {/each}
+
+    {#each Array(hourSegments) as _, i}
+      {#each quarterOffsets as minute}
+        <div
+          class="absolute top-0 bottom-0 border-l border-dashed border-[var(--color-border)] opacity-12"
+          style="left: {(i + minute / 60) * (100 / hourSegments)}%;"
+        ></div>
+      {/each}
     {/each}
 
     {#each member.time_logs || [] as task (task.id)}

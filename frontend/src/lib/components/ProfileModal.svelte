@@ -7,6 +7,9 @@
   let currentPassword = '';
   let newPassword = '';
   let confirmPassword = '';
+  let showCurrentPassword = false;
+  let showNewPassword = false;
+  let showConfirmPassword = false;
   let loading = false;
   let error = '';
   let success = false;
@@ -67,61 +70,103 @@
 
 <dialog
   bind:this={dialog}
-  class="backdrop:bg-black/50 p-0 rounded-xl shadow-2xl w-[400px] open:animate-in open:fade-in open:zoom-in-95 backdrop:animate-in backdrop:fade-in"
+  class="w-[400px] rounded-xl p-0 shadow-2xl backdrop:bg-black/50 open:animate-in open:fade-in open:zoom-in-95 backdrop:animate-in backdrop:fade-in"
   on:close={() => dispatch('close')}
 >
-  <div class="p-6 bg-white">
-    <div class="flex justify-between items-center mb-6">
-      <h3 class="text-xl font-bold text-slate-800">プロフィール設定</h3>
-      <button type="button" on:click={() => dispatch('close')} class="text-slate-400 hover:text-slate-600" aria-label="プロフィール設定を閉じる">
+  <div class="bg-surface-primary p-6 text-text-base">
+    <div class="mb-6 flex items-center justify-between">
+      <h3 class="text-xl font-bold text-text-base">プロフィール設定</h3>
+      <button type="button" on:click={() => dispatch('close')} class="text-text-muted hover:text-text-base" aria-label="プロフィール設定を閉じる">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
 
     <div class="space-y-4">
-      <div class="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100 mb-2">
-        <div class="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center text-xl font-bold text-white shadow-inner">
+      <div class="mb-2 flex items-center gap-4 rounded-xl border border-border-base bg-surface-secondary p-4">
+        <div class="flex h-12 w-12 items-center justify-center rounded-full bg-blue-500 text-xl font-bold text-white shadow-inner">
             {$auth.user?.name.charAt(0).toUpperCase()}
         </div>
         <div>
-            <p class="font-bold text-slate-800 text-lg">{$auth.user?.name}</p>
-            <p class="text-xs text-slate-400 font-mono">@{$auth.user?.username}</p>
+            <p class="text-lg font-bold text-text-base">{$auth.user?.name}</p>
+            <p class="font-mono text-xs text-text-muted">@{$auth.user?.username}</p>
         </div>
       </div>
 
-      <div class="pt-2 border-t border-slate-100">
-        <h4 class="text-xs font-bold text-slate-500 uppercase mb-3 tracking-widest">パスワード変更</h4>
+      <div class="border-t border-border-base pt-2">
+        <h4 class="mb-3 text-xs font-bold uppercase tracking-widest text-text-muted">パスワード変更</h4>
         
         <form on:submit|preventDefault={handleUpdatePassword} class="space-y-3">
           <div>
-            <label for="current-password" class="block text-[10px] font-bold text-slate-400 uppercase mb-1">現在のパスワード</label>
-            <input 
-              id="current-password"
-              type="password"
-              bind:value={currentPassword} 
-              class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              required
-            />
+            <label for="current-password" class="mb-1 block text-[10px] font-bold uppercase text-text-muted">現在のパスワード</label>
+            <div class="relative">
+              <input 
+                id="current-password"
+                type={showCurrentPassword ? 'text' : 'password'}
+                bind:value={currentPassword} 
+                class="w-full rounded-lg border border-border-base bg-surface-secondary px-3 py-2 pr-10 text-sm text-text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+              <button
+                type="button"
+                class="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-text-muted transition-colors hover:text-text-base"
+                aria-label={showCurrentPassword ? '現在のパスワードを隠す' : '現在のパスワードを表示'}
+                on:click={() => (showCurrentPassword = !showCurrentPassword)}
+              >
+                {#if showCurrentPassword}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.58 10.58a2 2 0 1 0 2.83 2.83"></path><path d="M9.88 4.24A10.94 10.94 0 0 1 12 4c7 0 10 8 10 8a17.22 17.22 0 0 1-2.17 3.19"></path><path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 8 10 8a10.94 10.94 0 0 0 5.76-1.62"></path><line x1="2" y1="2" x2="22" y2="22"></line></svg>
+                {:else}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.06 12a11 11 0 0 1 19.88 0 11 11 0 0 1-19.88 0z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                {/if}
+              </button>
+            </div>
           </div>
           <div>
-            <label for="new-password" class="block text-[10px] font-bold text-slate-400 uppercase mb-1">新しいパスワード</label>
-            <input 
-              id="new-password"
-              type="password"
-              bind:value={newPassword} 
-              class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              required
-            />
+            <label for="new-password" class="mb-1 block text-[10px] font-bold uppercase text-text-muted">新しいパスワード</label>
+            <div class="relative">
+              <input 
+                id="new-password"
+                type={showNewPassword ? 'text' : 'password'}
+                bind:value={newPassword} 
+                class="w-full rounded-lg border border-border-base bg-surface-secondary px-3 py-2 pr-10 text-sm text-text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+              <button
+                type="button"
+                class="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-text-muted transition-colors hover:text-text-base"
+                aria-label={showNewPassword ? '新しいパスワードを隠す' : '新しいパスワードを表示'}
+                on:click={() => (showNewPassword = !showNewPassword)}
+              >
+                {#if showNewPassword}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.58 10.58a2 2 0 1 0 2.83 2.83"></path><path d="M9.88 4.24A10.94 10.94 0 0 1 12 4c7 0 10 8 10 8a17.22 17.22 0 0 1-2.17 3.19"></path><path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 8 10 8a10.94 10.94 0 0 0 5.76-1.62"></path><line x1="2" y1="2" x2="22" y2="22"></line></svg>
+                {:else}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.06 12a11 11 0 0 1 19.88 0 11 11 0 0 1-19.88 0z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                {/if}
+              </button>
+            </div>
           </div>
           <div>
-            <label for="confirm-password" class="block text-[10px] font-bold text-slate-400 uppercase mb-1">新しいパスワード（確認）</label>
-            <input 
-              id="confirm-password"
-              type="password"
-              bind:value={confirmPassword} 
-              class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              required
-            />
+            <label for="confirm-password" class="mb-1 block text-[10px] font-bold uppercase text-text-muted">新しいパスワード（確認）</label>
+            <div class="relative">
+              <input 
+                id="confirm-password"
+                type={showConfirmPassword ? 'text' : 'password'}
+                bind:value={confirmPassword} 
+                class="w-full rounded-lg border border-border-base bg-surface-secondary px-3 py-2 pr-10 text-sm text-text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+              <button
+                type="button"
+                class="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-text-muted transition-colors hover:text-text-base"
+                aria-label={showConfirmPassword ? '確認用パスワードを隠す' : '確認用パスワードを表示'}
+                on:click={() => (showConfirmPassword = !showConfirmPassword)}
+              >
+                {#if showConfirmPassword}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.58 10.58a2 2 0 1 0 2.83 2.83"></path><path d="M9.88 4.24A10.94 10.94 0 0 1 12 4c7 0 10 8 10 8a17.22 17.22 0 0 1-2.17 3.19"></path><path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 8 10 8a10.94 10.94 0 0 0 5.76-1.62"></path><line x1="2" y1="2" x2="22" y2="22"></line></svg>
+                {:else}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.06 12a11 11 0 0 1 19.88 0 11 11 0 0 1-19.88 0z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                {/if}
+              </button>
+            </div>
           </div>
 
           {#if error}
@@ -137,7 +182,7 @@
           <button 
             type="submit"
             disabled={loading || success}
-            class="w-full mt-2 px-4 py-2.5 bg-blue-600 text-white font-bold text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all shadow-lg shadow-blue-100"
+            class="mt-2 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-blue-700 disabled:opacity-50"
           >
             {loading ? '更新中...' : 'パスワードを更新'}
           </button>

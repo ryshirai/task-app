@@ -102,6 +102,7 @@ export interface PaginatedNotifications {
 export interface AuthState {
     token: string | null;
     user: User | null;
+    initialized: boolean;
 }
 
 export interface StatusCount {

@@ -6,6 +6,7 @@
   import DisplayGroupModal from '$lib/components/DisplayGroupModal.svelte';
   import ProfileModal from '$lib/components/ProfileModal.svelte';
   import Login from '$lib/components/Login.svelte';
+  import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import { type User, type Task, type TaskTimeLog, type Notification as AppNotification, type PaginatedNotifications, type DisplayGroup } from '$lib/types';
   import { auth, logout } from '$lib/auth';
   import { toLocalISOString, getTodayJSTString, getJSTDateString, formatDateTime } from '$lib/utils';
@@ -40,7 +41,6 @@
   let userMenu: HTMLDivElement | null = null;
   let showNavDropdown = false;
   let showUserDropdown = false;
-  let selectedTimelineMemberId: number | null = null;
 
   $: if (browser) {
     if (selectedGroupId) localStorage.setItem('glanceflow_selected_group', selectedGroupId.toString());
@@ -298,7 +298,6 @@
   }
 
   function handleOpenTaskForm(event: CustomEvent<{ member_id: number; start: Date; end: Date }>) {
-    selectedTimelineMemberId = event.detail.member_id;
     taskFormSelection = event.detail;
   }
 
@@ -447,45 +446,35 @@
   }
 
   function handleTimelineEditTask(event: CustomEvent<TaskTimeLog>) {
-    selectedTimelineMemberId = event.detail.user_id;
     editingTask = event.detail;
-  }
-
-  function clearTimelineMemberSelection() {
-    selectedTimelineMemberId = null;
-  }
-
-  function navigateToFocusView() {
-    const params = new URLSearchParams();
-    if (selectedDate) params.set('date', selectedDate);
-    if (selectedGroupId !== null) params.set('group_id', String(selectedGroupId));
-    goto(`/today-focus${params.toString() ? `?${params.toString()}` : ''}`);
   }
 
 </script>
 
-{#if !$auth.token}
+{#if !$auth.initialized}
+  <div class="flex h-full items-center justify-center text-slate-400 font-bold animate-pulse">読み込み中...</div>
+{:else if !$auth.token}
   <Login on:loginSuccess={() => fetchUsers()} />
 {:else}
-<div class="h-full flex flex-col font-sans relative">
+<div class="relative flex h-full flex-col font-sans text-[var(--color-text)]">
   <!-- Top Bar -->
-  <header class="h-10 px-4 flex items-center justify-between shrink-0 bg-white border-b border-slate-200 shadow-sm z-[100]">
-    <div class="flex items-center gap-3">
-      <h2 class="text-sm font-black text-slate-800 whitespace-nowrap tracking-tighter uppercase">GlanceFlow</h2>
+  <header class="z-[100] flex h-11 shrink-0 flex-nowrap items-center justify-between border-b px-1 sm:px-3 backdrop-blur-xl bg-[color:color-mix(in_srgb,var(--color-surface)_82%,transparent)] border-[color:color-mix(in_srgb,var(--color-border)_90%,transparent)] shadow-[0_14px_34px_-24px_rgba(15,23,42,0.6)]">
+    <div class="flex min-w-0 shrink items-center gap-1 sm:gap-2">
+      <h2 class="truncate whitespace-nowrap text-[12px] font-black uppercase tracking-tighter text-[var(--color-text)] sm:text-sm">GlanceFlow</h2>
       {#if $auth.user}
-        <span class="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[9px] font-bold uppercase">{$auth.user.role}</span>
+        <span class="hidden rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_85%,transparent)] border-[var(--color-border)] text-[var(--color-muted)] md:inline-flex">{$auth.user.role}</span>
       {/if}
     </div>
     
-    <div class="flex items-center gap-3">
-      <div class="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200">
+    <div class="flex min-w-0 flex-1 items-center justify-end gap-0 sm:gap-1">
+      <div class="flex min-w-0 shrink items-center gap-0 rounded-xl border px-0.5 py-[1px] bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_82%,transparent)] border-[var(--color-border)] shadow-[0_8px_18px_-14px_rgba(15,23,42,0.55)] sm:gap-1">
         <button 
             on:click={() => {
                 const d = new Date(selectedDate);
                 d.setDate(d.getDate() - 1);
                 selectedDate = d.toISOString().split('T')[0];
             }}
-            class="p-1 hover:bg-white hover:shadow-sm rounded-md transition-all text-slate-500"
+            class="shrink-0 rounded-md p-[1px] text-[var(--color-muted)] transition-all hover:bg-[var(--color-surface)] hover:text-[var(--color-text)] hover:shadow-sm sm:p-0.5"
             aria-label="前日へ移動"
         >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
@@ -493,7 +482,7 @@
         <input 
             type="date" 
             bind:value={selectedDate}
-            class="bg-transparent border-none text-[11px] font-bold text-slate-700 outline-none px-1 cursor-pointer w-28 text-center"
+            class="w-[5.5rem] min-w-0 cursor-pointer appearance-none border-none bg-transparent px-0 text-center text-[9px] font-bold text-[var(--color-text)] outline-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit-fields-wrapper]:p-0 [&::-webkit-datetime-edit]:p-0 sm:w-24 sm:px-0.5 sm:text-[10px] md:w-28 md:px-1 md:text-[11px]"
         />
         <button 
             on:click={() => {
@@ -501,32 +490,24 @@
                 d.setDate(d.getDate() + 1);
                 selectedDate = d.toISOString().split('T')[0];
             }}
-            class="p-1 hover:bg-white hover:shadow-sm rounded-md transition-all text-slate-500"
+            class="shrink-0 rounded-md p-[1px] text-[var(--color-muted)] transition-all hover:bg-[var(--color-surface)] hover:text-[var(--color-text)] hover:shadow-sm sm:p-0.5"
             aria-label="翌日へ移動"
         >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </button>
       </div>
 
-      <button
-        type="button"
-        on:click={navigateToFocusView}
-        class="px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 rounded-md transition-all text-[10px] font-black uppercase tracking-tight"
-      >
-        フォーカス表示
-      </button>
-
-      <div class="relative group">
+      <div class="relative hidden group xl:block">
         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
         <input 
             type="text" 
             bind:value={filterText}
             placeholder="絞り込み..." 
-            class="pl-8 pr-3 py-1 bg-slate-100 border-transparent border focus:bg-white focus:border-blue-200 focus:ring-2 focus:ring-blue-50 rounded-lg text-[11px] outline-none w-40 transition-all"
+            class="w-40 rounded-lg border border-transparent bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_84%,transparent)] py-1 pl-8 pr-3 text-[11px] text-[var(--color-text)] outline-none transition-all focus:border-blue-300 focus:bg-[var(--color-surface)] focus:ring-2 focus:ring-blue-500/15"
         />
       </div>
 
-      <div class="flex gap-3 text-[9px] font-bold text-slate-400 uppercase tracking-tighter bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+      <div class="hidden gap-1.5 rounded-lg border px-1.5 py-1 text-[9px] font-bold uppercase tracking-tighter bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_84%,transparent)] border-[var(--color-border)] text-[var(--color-muted)] lg:flex xl:gap-2">
         <div class="flex items-center gap-1">
           <div class="w-1.5 h-1.5 bg-yellow-400 rounded-full"></div> 未着手
         </div>
@@ -541,38 +522,49 @@
         </div>
       </div>
       
-      <div class="flex items-center gap-1 border-l border-slate-200 pl-3">
+      <div class="flex min-w-0 shrink items-center gap-0 border-l border-[var(--color-border)] pl-0 sm:gap-0.5 sm:pl-1">
         <!-- Navigation Menu Dropdown -->
         <div class="relative" bind:this={navMenu}>
           <button 
             on:click|stopPropagation={() => showNavDropdown = !showNavDropdown}
-            class="px-2.5 py-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-all text-[10px] font-bold flex items-center gap-1"
+            class="flex items-center gap-0.5 rounded-md px-1 py-1 text-[10px] font-bold text-[var(--color-muted)] transition-all hover:bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_90%,transparent)] hover:text-[var(--color-text)] sm:gap-1 sm:px-2"
           >
-            ツール
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="transition-transform {showNavDropdown ? 'rotate-180' : ''}"><path d="m6 9 6 6 6-6"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.05.05a2 2 0 1 1-2.83 2.83l-.05-.05A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-.4-1.1 1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.87.34l-.05.05a2 2 0 1 1-2.83-2.83l.05-.05A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H2.9a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.1-.4 1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.87l-.05-.05a2 2 0 1 1 2.83-2.83l.05.05A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V2.9a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 .4 1.1 1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.87-.34l.05-.05a2 2 0 1 1 2.83 2.83l-.05.05A1.7 1.7 0 0 0 19.4 9c.26.3.5.66.6 1a1.7 1.7 0 0 0 1.1.4h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.1.4 1.7 1.7 0 0 0-.6 1z"/></svg>
+            <span>ツール</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="transition-transform {showNavDropdown ? 'rotate-180' : ''}"><path d="m6 9 6 6 6-6"/></svg>
           </button>
 
           {#if showNavDropdown}
-            <div class="absolute left-0 top-9 w-44 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 animate-in fade-in zoom-in-95 duration-100">
-              <button on:click={() => { goto('/reports'); showNavDropdown = false; }} class="w-full text-left px-3 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2">
+            <div class="absolute left-0 top-9 z-[110] w-52 rounded-xl border py-1.5 shadow-2xl animate-in fade-in zoom-in-95 duration-100 bg-[var(--color-surface)] border-[var(--color-border-strong)]">
+              <button on:click={() => { goto('/reports'); showNavDropdown = false; }} class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[11px] font-bold text-[var(--color-muted)] hover:bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_82%,transparent)] hover:text-[var(--color-text)]">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
                 日報一覧
               </button>
-              <button on:click={() => { goto('/activity-log'); showNavDropdown = false; }} class="w-full text-left px-3 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2">
+              <button on:click={() => { goto('/activity-log'); showNavDropdown = false; }} class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[11px] font-bold text-[var(--color-muted)] hover:bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_82%,transparent)] hover:text-[var(--color-text)]">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></svg>
                 操作履歴
               </button>
-              <button on:click={() => { goto('/analytics'); showNavDropdown = false; }} class="w-full text-left px-3 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2">
+              <button on:click={() => { goto('/analytics'); showNavDropdown = false; }} class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[11px] font-bold text-[var(--color-muted)] hover:bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_82%,transparent)] hover:text-[var(--color-text)]">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
                 個人分析
               </button>
-              <button on:click={() => { goto('/today-focus'); showNavDropdown = false; }} class="w-full text-left px-3 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2">
+              <button on:click={() => { goto('/today-focus'); showNavDropdown = false; }} class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[11px] font-bold text-[var(--color-muted)] hover:bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_82%,transparent)] hover:text-[var(--color-text)]">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
                 本日のフォーカス
               </button>
+              <div class="my-1 h-px bg-[color:color-mix(in_srgb,var(--color-border)_88%,transparent)]"></div>
               {#if $auth.user?.role === 'admin'}
-                <div class="h-px bg-slate-100 my-1"></div>
-                <button on:click={() => { goto('/admin/task-reports'); showNavDropdown = false; }} class="w-full text-left px-3 py-2 text-[11px] font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-2">
+                <button on:click={() => { showUserManagement = true; showNavDropdown = false; }} class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[11px] font-bold text-[var(--color-muted)] hover:bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_82%,transparent)] hover:text-[var(--color-text)]">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                  メンバー管理
+                </button>
+              {/if}
+              <button on:click={() => { showDisplayGroupSettings = true; showNavDropdown = false; }} class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[11px] font-bold text-[var(--color-muted)] hover:bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_82%,transparent)] hover:text-[var(--color-text)]">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                グループ設定
+              </button>
+              {#if $auth.user?.role === 'admin'}
+                <button on:click={() => { goto('/admin/task-reports'); showNavDropdown = false; }} class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[11px] font-bold text-blue-600 hover:bg-blue-500/10">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M18 7a4 4 0 0 0-3 3.87"/></svg>
                   タスクレポート
                 </button>
@@ -583,35 +575,36 @@
 
         <button 
             on:click={() => goto('/reports/new')}
-            class="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-md transition-all text-[10px] font-bold shadow-sm"
+            class="inline-flex items-center gap-0.5 rounded-md bg-slate-900 px-1 py-1 text-[10px] font-bold text-white shadow-sm transition-all hover:bg-slate-800 sm:gap-1 sm:px-2"
         >
-            日報提出
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            <span class="hidden md:inline">日報提出</span>
         </button>
 
-        <div class="flex items-center gap-0.5 ml-1">
+        <div class="ml-0 flex items-center gap-0 sm:ml-1 sm:gap-0.5">
             <div class="relative" bind:this={notificationMenu}>
               <button
                 on:click|stopPropagation={() => showNotifications = !showNotifications}
-                class="relative p-1.5 text-slate-400 hover:text-slate-600 transition-colors"
+                class="relative rounded-md p-1 text-[var(--color-muted)] transition-colors hover:bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_90%,transparent)] hover:text-[var(--color-text)] sm:p-1.5"
                 title="通知"
                 aria-label="通知を開く"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5"></path><path d="M9 17a3 3 0 0 0 6 0"></path></svg>
                 {#if unreadNotificationCount > 0}
-                  <span class="absolute top-0.5 right-0.5 min-w-[14px] h-[14px] px-1 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-white">
+                  <span class="absolute right-0.5 top-0.5 flex h-[14px] min-w-[14px] items-center justify-center rounded-full border-2 border-[var(--color-surface)] bg-red-500 px-1 text-[8px] font-bold text-white">
                     {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
                   </span>
                 {/if}
               </button>
 
               {#if showNotifications}
-                <div class="absolute right-0 top-9 z-50 w-80 max-h-96 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/50">
-                    <h3 class="text-xs font-black text-slate-800 uppercase tracking-tight">Notifications</h3>
+                <div class="absolute right-0 top-9 z-[110] max-h-96 w-80 overflow-hidden rounded-xl border shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200 bg-[var(--color-surface)] border-[var(--color-border-strong)]">
+                  <div class="flex items-center justify-between border-b px-4 py-3 border-[var(--color-border)] bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_76%,transparent)]">
+                    <h3 class="text-xs font-black uppercase tracking-tight text-[var(--color-text)]">通知</h3>
                     <button
                       on:click={markAllNotificationsAsRead}
                       disabled={unreadNotificationCount === 0}
-                      class="text-[10px] font-bold text-blue-600 disabled:text-slate-300 hover:underline"
+                      class="text-[10px] font-bold text-blue-600 hover:underline disabled:text-slate-400/70"
                     >
                       すべて既読にする
                     </button>
@@ -619,27 +612,27 @@
 
                   <div class="max-h-80 overflow-y-auto">
                     {#if notificationsLoading}
-                      <div class="px-4 py-8 text-center text-[11px] text-slate-400 font-medium">読み込み中...</div>
+                      <div class="px-4 py-8 text-center text-[11px] font-medium text-[var(--color-muted)]">読み込み中...</div>
                     {:else if notificationsError}
                       <div class="px-4 py-8 text-center text-[11px] text-red-500 font-medium">{notificationsError}</div>
                     {:else if notifications.length === 0}
                       <div class="px-4 py-12 text-center">
-                        <div class="text-slate-200 mb-2 flex justify-center">
+                        <div class="mb-2 flex justify-center text-[var(--color-border)]">
                           <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                         </div>
-                        <div class="text-[11px] text-slate-400 font-bold">通知はありません</div>
+                        <div class="text-[11px] font-bold text-[var(--color-muted)]">通知はありません</div>
                       </div>
                     {:else}
                       {#each notifications as notification (notification.id)}
                         <button
                           on:click={() => handleNotificationClick(notification)}
-                          class="w-full text-left px-4 py-3 border-b border-slate-50 hover:bg-slate-50 transition-colors {notification.is_read ? 'opacity-60' : 'bg-blue-50/30'}"
+                          class="w-full border-b px-4 py-3 text-left transition-colors border-[var(--color-border)] hover:bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_86%,transparent)] {notification.is_read ? 'opacity-60' : 'bg-blue-500/8'}"
                         >
-                          <div class="text-[11px] font-bold text-slate-800 mb-0.5">{notification.title}</div>
+                          <div class="mb-0.5 text-[11px] font-bold text-[var(--color-text)]">{notification.title}</div>
                           {#if notification.body}
-                            <div class="text-[10px] text-slate-500 leading-relaxed line-clamp-2">{notification.body}</div>
+                            <div class="line-clamp-2 text-[10px] leading-relaxed text-[var(--color-muted)]">{notification.body}</div>
                           {/if}
-                          <div class="text-[9px] text-slate-400 mt-1.5 font-medium">{new Date(notification.created_at).toLocaleString('ja-JP')}</div>
+                          <div class="mt-1.5 text-[9px] font-medium text-[var(--color-muted)]">{new Date(notification.created_at).toLocaleString('ja-JP')}</div>
                         </button>
                       {/each}
                     {/if}
@@ -648,11 +641,13 @@
               {/if}
             </div>
 
+            <ThemeToggle />
+
             <!-- User Menu Dropdown -->
             <div class="relative" bind:this={userMenu}>
               <button 
                 on:click|stopPropagation={() => showUserDropdown = !showUserDropdown}
-                class="p-1 rounded-full hover:bg-slate-100 transition-all border-2 border-transparent {showUserDropdown ? 'border-slate-200 bg-slate-50' : ''}"
+                class="rounded-full border-2 border-transparent p-0.5 transition-all hover:bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_90%,transparent)] sm:p-1 {showUserDropdown ? 'border-[var(--color-border)] bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_82%,transparent)]' : ''}"
               >
                 {#if $auth.user?.avatar_url}
                   <img src={$auth.user.avatar_url} alt="Profile" class="w-6 h-6 rounded-full object-cover shadow-sm" />
@@ -664,25 +659,18 @@
               </button>
 
               {#if showUserDropdown}
-                <div class="absolute right-0 top-9 w-52 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div class="px-4 py-2 border-b border-slate-50 mb-1">
-                    <div class="text-[11px] font-black text-slate-800 truncate">{$auth.user?.name}</div>
-                    <div class="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{$auth.user?.role}</div>
+                <div class="absolute right-0 top-9 z-[110] w-52 rounded-xl border py-2 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200 bg-[var(--color-surface)] border-[var(--color-border-strong)]">
+                  <div class="mb-1 border-b px-4 py-2 border-[var(--color-border)]">
+                    <div class="truncate text-[11px] font-black text-[var(--color-text)]">{$auth.user?.name}</div>
+                    <div class="text-[9px] font-bold uppercase tracking-tighter text-[var(--color-muted)]">{$auth.user?.role}</div>
                   </div>
                   
-                  <button on:click={() => { showProfile = true; showUserDropdown = false; }} class="w-full text-left px-4 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2">
+                  <button on:click={() => { showProfile = true; showUserDropdown = false; }} class="flex w-full items-center gap-2 px-4 py-2 text-left text-[11px] font-bold text-[var(--color-muted)] hover:bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_78%,transparent)]">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                     プロフィール設定
                   </button>
 
-                  {#if $auth.user?.role === 'admin'}
-                    <button on:click={() => { showUserManagement = true; showUserDropdown = false; }} class="w-full text-left px-4 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
-                      メンバー管理
-                    </button>
-                  {/if}
-
-                  <div class="h-px bg-slate-100 my-1"></div>
+                  <div class="my-1 h-px bg-[var(--color-border)]"></div>
                   
                   <button on:click={logout} class="w-full text-left px-4 py-2 text-[11px] font-bold text-red-500 hover:bg-red-50 flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -696,51 +684,34 @@
     </div>
   </header>
 
-  <main class="flex-1 min-h-0 flex flex-col p-1 overflow-hidden">
+  <main class="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
     <!-- Sub Header: Group Selector -->
-    <div class="px-2 py-1.5 flex items-center gap-2 mb-1">
-      <div class="flex items-center bg-slate-100/80 p-1 rounded-xl border border-slate-200/60 shadow-sm">
+    <div class="mb-2 flex items-center gap-2 px-1 py-1.5">
+      <div class="flex items-center rounded-xl border p-1 shadow-sm bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_84%,transparent)] border-[var(--color-border)]">
         <button 
           on:click={() => selectedGroupId = null}
-          class="px-3 py-1 text-[10px] font-black uppercase tracking-tight rounded-lg transition-all {selectedGroupId === null ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}"
+          class="rounded-lg px-3 py-1 text-[10px] font-black uppercase tracking-tight transition-all {selectedGroupId === null ? 'bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm' : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'}"
         >
           全員
         </button>
         {#each displayGroups as group}
           <button 
             on:click={() => selectedGroupId = group.id}
-            class="px-3 py-1 text-[10px] font-black uppercase tracking-tight rounded-lg transition-all {selectedGroupId === group.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}"
+            class="rounded-lg px-3 py-1 text-[10px] font-black uppercase tracking-tight transition-all {selectedGroupId === group.id ? 'bg-[var(--color-surface)] text-blue-600 shadow-sm' : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'}"
           >
             {group.name}
           </button>
         {/each}
-        <div class="w-px h-3 bg-slate-200 mx-1"></div>
-        <button 
-          on:click={() => showDisplayGroupSettings = true}
-          class="p-1 text-slate-400 hover:text-slate-600 hover:bg-white rounded-lg transition-all"
-          title="グループ設定を編集"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-        </button>
       </div>
-      <div class="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-auto px-2">
-        {filteredUsers.length} members visible
+      <div class="ml-auto px-2 text-[9px] font-bold uppercase tracking-widest text-[var(--color-muted)]">
+        {filteredUsers.length}名のメンバーを表示中
       </div>
-      {#if selectedTimelineMemberId}
-        <button
-          type="button"
-          on:click={clearTimelineMemberSelection}
-          class="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700 hover:bg-blue-100 transition-colors"
-        >
-          朝会対象: {users.find((u) => u.id === selectedTimelineMemberId)?.name || `Member #${selectedTimelineMemberId}`} (解除)
-        </button>
-      {/if}
     </div>
 
     {#if loading}
       <div class="flex-1 flex items-center justify-center text-slate-400 font-bold animate-pulse">ダッシュボードを読み込み中...</div>
     {:else if error}
-      <div class="flex-1 flex items-center justify-center text-red-500 bg-red-50 rounded-xl border border-red-100">{error}</div>
+      <div class="flex flex-1 items-center justify-center rounded-xl border border-red-200/60 bg-red-500/10 text-red-500">{error}</div>
     {:else}
       <TimelineContainer 
         members={filteredUsers} 
