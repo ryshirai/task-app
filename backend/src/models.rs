@@ -18,6 +18,8 @@ pub struct User {
     pub username: Option<String>,
     /// User email address.
     pub email: Option<String>,
+    /// New email awaiting verification before promotion to `email`.
+    pub pending_email: Option<String>,
     /// Optional avatar image URL.
     pub avatar_url: Option<String>,
     /// Role name (for example `admin` or `member`).

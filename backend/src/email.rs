@@ -40,7 +40,7 @@ impl StdoutEmailProvider {
 #[async_trait]
 impl EmailService for StdoutEmailProvider {
     async fn send_password_reset_email(&self, to: &str, token: &str) -> Result<(), String> {
-        println!("PASSWORD RESET EMAIL to {to}: {}", self.reset_link(token));
+        println!("【パスワードリセットメール送信】宛先: {to}, リンク: {}", self.reset_link(token));
         Ok(())
     }
 
@@ -51,7 +51,7 @@ impl EmailService for StdoutEmailProvider {
         group_name: &str,
     ) -> Result<(), String> {
         println!(
-            "INVITATION EMAIL to {to} for group '{group_name}': {}",
+            "【招待メール送信】宛先: {to}, グループ: {group_name}, リンク: {}",
             self.invitation_link(token)
         );
         Ok(())
@@ -59,7 +59,7 @@ impl EmailService for StdoutEmailProvider {
 
     async fn send_verification_email(&self, to: &str, token: &str) -> Result<(), String> {
         println!(
-            "VERIFICATION EMAIL to {to}: {}",
+            "【メールアドレス認証メール送信】宛先: {to}, リンク: {}",
             self.verification_link(token)
         );
         Ok(())
@@ -112,9 +112,9 @@ impl SesEmailProvider {
 impl EmailService for SesEmailProvider {
     async fn send_password_reset_email(&self, to: &str, token: &str) -> Result<(), String> {
         let reset_link = format!("{}/reset-password?token={token}", self.frontend_url);
-        let content = format!("Reset your password using this link: {reset_link}");
+        let content = format!("以下のリンクからパスワードをリセットしてください:\n\n{}", reset_link);
 
-        self.send_email(to, "Password Reset", &content).await
+        self.send_email(to, "パスワードリセットのご案内", &content).await
     }
 
     async fn send_invitation_email(
@@ -124,17 +124,21 @@ impl EmailService for SesEmailProvider {
         group_name: &str,
     ) -> Result<(), String> {
         let join_link = format!("{}/join?token={token}", self.frontend_url);
-        let content =
-            format!("You were invited to join {group_name}. Use this link to join: {join_link}");
+        let content = format!(
+            "{} への招待が届いています。\n\n以下のリンクから参加してください:\n\n{}",
+            group_name, join_link
+        );
 
-        self.send_email(to, "You're Invited", &content).await
+        self.send_email(to, "チームへの招待が届いています", &content).await
     }
 
     async fn send_verification_email(&self, to: &str, token: &str) -> Result<(), String> {
         let verify_link = format!("{}/verify-email?token={token}", self.frontend_url);
-        let content =
-            format!("Please verify your email address by clicking this link: {verify_link}");
+        let content = format!(
+            "メールアドレスの認証を完了するには、以下のリンクをクリックしてください:\n\n{}",
+            verify_link
+        );
 
-        self.send_email(to, "Verify your email", &content).await
+        self.send_email(to, "メールアドレスの認証をお願いします", &content).await
     }
 }

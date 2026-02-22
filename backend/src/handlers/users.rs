@@ -247,7 +247,7 @@ pub async fn update_email(
     let token = uuid::Uuid::new_v4().to_string();
 
     sqlx::query(
-        "UPDATE users SET email = $1, email_verified = FALSE, email_verification_token = $2 WHERE id = $3 AND organization_id = $4"
+        "UPDATE users SET pending_email = $1, email_verification_token = $2 WHERE id = $3 AND organization_id = $4"
     )
     .bind(&input.email)
     .bind(&token)

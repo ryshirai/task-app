@@ -327,8 +327,32 @@ pub async fn verify_email(
     State(state): State<AppState>,
     Json(input): Json<VerifyEmailInput>,
 ) -> Result<StatusCode, (StatusCode, String)> {
+    let pending_email = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT pending_email FROM users WHERE email_verification_token = $1",
+    )
+    .bind(&input.token)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((
+        StatusCode::NOT_FOUND,
+        "Invalid or expired verification token".to_string(),
+    ))?;
+
+    let Some(_email) = pending_email else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "No pending email to verify".to_string(),
+        ));
+    };
+
     let result = sqlx::query(
-        "UPDATE users SET email_verified = TRUE, email_verification_token = NULL WHERE email_verification_token = $1"
+        "UPDATE users
+         SET email = pending_email,
+             pending_email = NULL,
+             email_verified = TRUE,
+             email_verification_token = NULL
+         WHERE email_verification_token = $1"
     )
     .bind(&input.token)
     .execute(&state.pool)
