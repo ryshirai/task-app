@@ -10,7 +10,7 @@ chrono = { version = "0.4.43", features = ["serde"] }
 dotenvy = "0.15.7"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
-sqlx = { version = "0.8.6", features = ["postgres", "runtime-tokio-rustls", "chrono", "sqlite", "derive", "migrate", "macros", "runtime-tokio"] }
+sqlx = { version = "0.8.6", features = ["postgres", "runtime-tokio-rustls", "chrono", "derive", "migrate", "macros"] }
 tokio = { version = "1.49.0", features = ["full"] }
 tower-http = { version = "0.6.8", features = ["cors"] }
 argon2 = "0.5.3"
