@@ -3,12 +3,14 @@
   import { type TaskTimeLog, type TaskStatus } from '$lib/types';
   import { getTaskPosition, percentageToDate, snapTo15Min, toLocalISOString } from '$lib/utils';
   
+  /** Task log rendered on the timeline bar. */
   export let task: TaskTimeLog;
+  /** Day anchor used to convert bar position percentages into datetime values. */
   export let baseDate: Date;
 
   const dispatch = createEventDispatcher();
 
-  // Derived from task (source of truth)
+  // Keep render position in sync with source-of-truth task data unless dragging.
   $: basePos = getTaskPosition(task);
   $: left = isDragging ? draggedLeft : basePos.left;
   $: width = isDragging ? draggedWidth : basePos.width;
@@ -21,6 +23,7 @@
   let isOverdue = false;
   let interval: ReturnType<typeof setInterval>;
 
+  /** Recomputes overdue state for non-completed tasks. */
   function checkOverdue() {
     if (taskStatus === 'done') {
       isOverdue = false;
@@ -40,7 +43,7 @@
     clearInterval(interval);
   });
 
-  // Dynamic coloring
+  // Dynamic coloring based on status and overdue state.
   $: colorClass = (() => {
     if (taskStatus === 'done') return 'bg-gray-400';
     if (isOverdue) return 'bg-red-500 animate-pulse';
@@ -65,6 +68,7 @@
   let draggedWidth = 0;
   let hasMoved = false;
 
+  /** Starts drag or resize interaction and installs global mouse listeners. */
   function handleMouseDown(e: MouseEvent, mode: 'move' | 'resize-l' | 'resize-r') {
     e.stopPropagation(); // Stop bubbling to MemberRow creation
     
@@ -89,6 +93,7 @@
     window.addEventListener('mouseup', handleWindowMouseUp);
   }
 
+  /** Updates temporary drag geometry while pointer is moving. */
   function handleWindowMouseMove(e: MouseEvent) {
     if (!isDragging) return;
     
@@ -112,6 +117,7 @@
     }
   }
 
+  /** Finalizes interaction: emits click or updated time range. */
   function handleWindowMouseUp(e: MouseEvent) {
     if (!isDragging) return;
     
@@ -154,6 +160,7 @@
   }
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
   class="absolute top-0.5 bottom-0.5 rounded shadow-sm border border-white/20 text-[9px] text-white px-1.5 flex flex-col justify-center {colorClass} z-20 transition-all duration-200 overflow-visible group/task hover:shadow-md hover:-translate-y-[1px] hover:z-30"
   style="left: {left}%; width: {width}%; cursor: grab;"
@@ -168,7 +175,9 @@
   <div 
     class="absolute left-0 top-0 bottom-0 w-2 -ml-1 cursor-ew-resize z-30 opacity-0 group-hover/task:opacity-100 transition-opacity flex items-center justify-center"
     on:mousedown={(e) => handleMouseDown(e, 'resize-l')}
-    role="separator"
+    role="button"
+    aria-label="左端をリサイズ"
+    tabindex="-1"
   >
     <div class="w-0.5 h-2.5 bg-white/50 rounded-full shadow-sm"></div>
   </div>
@@ -196,7 +205,9 @@
   <div 
     class="absolute right-0 top-0 bottom-0 w-2 -mr-1 cursor-ew-resize z-30 opacity-0 group-hover/task:opacity-100 transition-opacity flex items-center justify-center"
     on:mousedown={(e) => handleMouseDown(e, 'resize-r')}
-    role="separator"
+    role="button"
+    aria-label="右端をリサイズ"
+    tabindex="-1"
   >
     <div class="w-0.5 h-2.5 bg-white/50 rounded-full shadow-sm"></div>
   </div>

@@ -3,7 +3,9 @@
   import { auth } from '$lib/auth';
   import type { User, DisplayGroup } from '$lib/types';
 
+  /** Available members that can be assigned to display groups. */
   export let members: User[] = [];
+  /** Current list of persisted display groups. */
   export let groups: DisplayGroup[] = [];
 
   const dispatch = createEventDispatcher();
@@ -13,6 +15,7 @@
   let editingGroupId: number | null = null;
   let showForm = false;
 
+  /** Resets form state and returns to list mode. */
   function resetForm() {
     name = '';
     selectedMemberIds = [];
@@ -20,11 +23,13 @@
     showForm = false;
   }
 
+  /** Opens empty form for creating a new group. */
   function startCreate() {
     resetForm();
     showForm = true;
   }
 
+  /** Opens form prefilled with an existing group. */
   function startEdit(group: DisplayGroup) {
     name = group.name;
     selectedMemberIds = [...group.member_ids];
@@ -32,6 +37,7 @@
     showForm = true;
   }
 
+  /** Creates or updates a display group, then emits updated list. */
   async function handleSave() {
     if (!name.trim() || selectedMemberIds.length === 0) {
       alert('名前と少なくとも1人のメンバーを選択してください。');
@@ -69,6 +75,7 @@
     }
   }
 
+  /** Deletes a display group after confirmation, then emits updated list. */
   async function handleDelete(id: number) {
     if (!confirm('このグループを削除しますか？')) return;
 
@@ -88,6 +95,7 @@
     }
   }
 
+  /** Toggles member selection for the group form. */
   function toggleMember(id: number) {
     if (selectedMemberIds.includes(id)) {
       selectedMemberIds = selectedMemberIds.filter(m => m !== id);
@@ -110,7 +118,7 @@
   <div class="bg-white flex flex-col h-[600px]">
     <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
       <h3 class="text-sm font-black text-slate-800 uppercase tracking-tight">表示グループ設定</h3>
-      <button on:click={() => dispatch('close')} class="text-slate-400 hover:text-slate-600 transition-colors">
+      <button type="button" on:click={() => dispatch('close')} class="text-slate-400 hover:text-slate-600 transition-colors" aria-label="表示グループ設定を閉じる">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
@@ -119,8 +127,9 @@
       {#if showForm}
         <div class="space-y-6 animate-in slide-in-from-top-2 duration-200">
           <div>
-            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-2">グループ名</label>
+            <label for="display-group-name" class="block text-[10px] font-bold text-slate-500 uppercase mb-2">グループ名</label>
             <input
+              id="display-group-name"
               bind:value={name}
               placeholder="チームA, プロジェクトXなど..."
               class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all"
@@ -128,10 +137,11 @@
           </div>
 
           <div>
-            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-2">メンバーを選択</label>
+            <p class="block text-[10px] font-bold text-slate-500 uppercase mb-2">メンバーを選択</p>
             <div class="grid grid-cols-2 gap-2">
               {#each members as member}
                 <button
+                  type="button"
                   on:click={() => toggleMember(member.id)}
                   class="flex items-center gap-2 p-2 rounded-lg border text-left transition-all {selectedMemberIds.includes(member.id) ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-200' : 'bg-white border-slate-100 hover:border-slate-200'}"
                 >
@@ -151,12 +161,14 @@
         <!-- Fixed Footer for Form Actions -->
         <div class="absolute bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-md border-t border-slate-100 flex gap-2">
           <button
+            type="button"
             on:click={handleSave}
             class="flex-1 bg-slate-900 text-white py-3 rounded-xl text-[11px] font-black hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 active:scale-95"
           >
             {editingGroupId ? '更新する' : '作成する'}
           </button>
           <button
+            type="button"
             on:click={resetForm}
             class="px-6 py-3 rounded-xl text-[11px] font-bold text-slate-500 hover:bg-slate-50 transition-all"
           >
@@ -168,6 +180,7 @@
           <div class="flex justify-between items-center">
             <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">保存済みグループ</h4>
             <button
+              type="button"
               on:click={startCreate}
               class="text-[10px] font-black text-blue-600 hover:text-blue-700 flex items-center gap-1"
             >
@@ -190,16 +203,20 @@
                   </div>
                   <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
+                      type="button"
                       on:click={() => startEdit(group)}
                       class="p-1.5 text-slate-400 hover:text-blue-500 transition-colors"
                       title="編集"
+                      aria-label="グループを編集"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                     </button>
                     <button
+                      type="button"
                       on:click={() => handleDelete(group.id)}
                       class="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
                       title="削除"
+                      aria-label="グループを削除"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                     </button>

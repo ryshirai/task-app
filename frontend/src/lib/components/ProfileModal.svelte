@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
-  import { auth } from '../auth';
+  import { auth } from '$lib/auth';
 
   const dispatch = createEventDispatcher();
 
@@ -12,6 +12,7 @@
   let success = false;
   let dialog: HTMLDialogElement;
 
+  /** Validates and submits a password update request for the current user. */
   async function handleUpdatePassword() {
     if (newPassword !== confirmPassword) {
       error = '新しいパスワードが一致しません。';
@@ -72,7 +73,7 @@
   <div class="p-6 bg-white">
     <div class="flex justify-between items-center mb-6">
       <h3 class="text-xl font-bold text-slate-800">プロフィール設定</h3>
-      <button on:click={() => dispatch('close')} class="text-slate-400 hover:text-slate-600" aria-label="プロフィール設定を閉じる">
+      <button type="button" on:click={() => dispatch('close')} class="text-slate-400 hover:text-slate-600" aria-label="プロフィール設定を閉じる">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
@@ -93,8 +94,9 @@
         
         <form on:submit|preventDefault={handleUpdatePassword} class="space-y-3">
           <div>
-            <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">現在のパスワード</label>
+            <label for="current-password" class="block text-[10px] font-bold text-slate-400 uppercase mb-1">現在のパスワード</label>
             <input 
+              id="current-password"
               type="password"
               bind:value={currentPassword} 
               class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
@@ -102,8 +104,9 @@
             />
           </div>
           <div>
-            <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">新しいパスワード</label>
+            <label for="new-password" class="block text-[10px] font-bold text-slate-400 uppercase mb-1">新しいパスワード</label>
             <input 
+              id="new-password"
               type="password"
               bind:value={newPassword} 
               class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
@@ -111,8 +114,9 @@
             />
           </div>
           <div>
-            <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">新しいパスワード（確認）</label>
+            <label for="confirm-password" class="block text-[10px] font-bold text-slate-400 uppercase mb-1">新しいパスワード（確認）</label>
             <input 
+              id="confirm-password"
               type="password"
               bind:value={confirmPassword} 
               class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
