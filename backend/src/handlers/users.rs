@@ -1,7 +1,7 @@
 use crate::AppState;
 use crate::handlers::log_activity;
 use crate::models::*;
-use crate::utils::is_valid_username;
+use crate::utils::{is_secure_password, is_valid_username};
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
@@ -67,6 +67,13 @@ pub async fn update_password(
     Extension(claims): Extension<Claims>,
     Json(input): Json<UpdatePasswordInput>,
 ) -> Result<StatusCode, (StatusCode, String)> {
+    if !is_secure_password(&input.new_password) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol".to_string(),
+        ));
+    }
+
     let stored_hash: String = sqlx::query_scalar(
         "SELECT password_hash FROM users WHERE id = $1 AND organization_id = $2",
     )
@@ -130,6 +137,12 @@ pub async fn create_user(
             StatusCode::BAD_REQUEST,
             "Username must contain only alphanumeric characters, underscores, or hyphens"
                 .to_string(),
+        ));
+    }
+    if !is_secure_password(&input.password) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol".to_string(),
         ));
     }
 

@@ -57,14 +57,14 @@
         
         <form on:submit|preventDefault={handleLogin} class="space-y-4">
             <div>
-                <label for="username" class="mb-1.5 block text-xs font-semibold text-[var(--text-muted)]">ユーザー名</label>
+                <label for="username" class="mb-1.5 block text-xs font-semibold text-[var(--text-muted)]">ユーザー名 または メールアドレス</label>
                 <input
                     id="username"
                     type="text"
                     bind:value={username}
                     required
                     class="form-control px-4 py-2.5 text-sm focus:ring-2 transition-all"
-                    placeholder="ユーザー名"
+                    placeholder="ユーザー名 または メールアドレス"
                 />
             </div>
             

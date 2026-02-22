@@ -16,6 +16,10 @@
     let password = '';
     let joining = false;
 
+    function isSecurePassword(value: string): boolean {
+        return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(value);
+    }
+
     onMount(async () => {
         token = page.url.searchParams.get('token') || '';
         if (!token) {
@@ -36,6 +40,11 @@
     });
 
     async function handleJoin() {
+        if (!isSecurePassword(password)) {
+            error = 'パスワードは8文字以上で、英大文字・英小文字・数字・記号をそれぞれ含めてください。';
+            return;
+        }
+
         joining = true;
         error = '';
         try {
@@ -87,7 +96,10 @@
                     <p class="ml-1 mt-1 text-[9px] text-[var(--text-muted)]">※半角英数字、_、- が使用可能です</p>
                 </div>
                 <input type="email" bind:value={email} required class="form-control px-4 py-2.5 text-sm focus:ring-2 transition-all" placeholder="メールアドレス" />
-                <input type="password" bind:value={password} required class="form-control px-4 py-2.5 text-sm focus:ring-2 transition-all" placeholder="パスワード" />
+                <div>
+                    <input type="password" bind:value={password} required class="form-control px-4 py-2.5 text-sm focus:ring-2 transition-all" placeholder="パスワード" />
+                    <p class="ml-1 mt-1 text-[9px] text-[var(--text-muted)]">※8文字以上、英大文字・英小文字・数字・記号を各1文字以上含めてください</p>
+                </div>
 
                 {#if error}
                     <p class="text-xs text-red-500 dark:text-red-300">{error}</p>

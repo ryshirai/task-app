@@ -15,14 +15,18 @@
   let success = false;
   let dialog: HTMLDialogElement;
 
+  function isSecurePassword(value: string): boolean {
+    return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(value);
+  }
+
   /** Validates and submits a password update request for the current user. */
   async function handleUpdatePassword() {
     if (newPassword !== confirmPassword) {
       error = '新しいパスワードが一致しません。';
       return;
     }
-    if (newPassword.length < 4) {
-      error = 'パスワードは4文字以上である必要があります。';
+    if (!isSecurePassword(newPassword)) {
+      error = 'パスワードは8文字以上で、英大文字・英小文字・数字・記号をそれぞれ含めてください。';
       return;
     }
 
@@ -143,6 +147,7 @@
                 {/if}
               </button>
             </div>
+            <p class="mt-1 text-[10px] text-text-muted">8文字以上、英大文字・英小文字・数字・記号を各1文字以上含めてください</p>
           </div>
           <div>
             <label for="confirm-password" class="mb-1 block text-[10px] font-bold uppercase text-text-muted">新しいパスワード（確認）</label>
