@@ -4,9 +4,13 @@
   import { auth } from '$lib/auth';
   import type { Task } from '$lib/types';
 
+  /** Selected start time for the new work log. */
   export let start: Date;
+  /** Selected end time for the new work log. */
   export let end: Date;
+  /** Member ID that owns this work log. */
   export let member_id: number;
+  /** Existing task titles used for datalist suggestions. */
   export let existingTasks: string[] = [];
 
   const dispatch = createEventDispatcher();
@@ -19,6 +23,7 @@
   let inputElement: HTMLInputElement;
   let formElement: HTMLFormElement;
 
+  /** Loads active tasks for the selected member to allow linking. */
   async function fetchActiveTasks() {
     if (!$auth.token) return;
     loadingActiveTasks = true;
@@ -36,6 +41,7 @@
     }
   }
 
+  /** Prefills form values from an existing active task. */
   function selectTask(task: Task) {
     title = task.title.toString();
     tagsInput = (task.tags || []).join(', ');
@@ -44,6 +50,7 @@
     setTimeout(() => inputElement.focus(), 0);
   }
 
+  /** Emits submit payload or cancels when no usable input exists. */
   function handleSubmit() {
     if (title.trim()) {
       const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t !== '');
@@ -62,12 +69,14 @@
     }
   }
 
+  /** Handles Escape to close the modal quickly. */
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       dispatch('cancel');
     }
   }
 
+  /** Cancels only when focus leaves the form and there is no input in progress. */
   function handleFormFocusOut(event: FocusEvent) {
     const nextTarget = event.relatedTarget as Node | null;
     if (nextTarget && formElement?.contains(nextTarget)) return;
@@ -87,7 +96,7 @@
   <button
     type="button"
     class="absolute inset-0 bg-slate-900/45 backdrop-blur-sm"
-    aria-label="Close task form"
+    aria-label="タスクフォームを閉じる"
     on:click={() => dispatch('cancel')}
   ></button>
 
@@ -109,7 +118,7 @@
     >
       {#if activeTasks.length > 0}
         <div>
-          <label class="block text-[10px] font-bold text-slate-500 uppercase mb-2">進行中のタスクから選ぶ</label>
+          <p class="block text-[10px] font-bold text-slate-500 uppercase mb-2">進行中のタスクから選ぶ</p>
           <div class="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
             {#each activeTasks as task}
               <button
@@ -128,9 +137,10 @@
       {/if}
 
       <div>
-        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">タスク名</label>
+        <label for="task-form-title" class="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">タスク名</label>
         <div class="relative">
           <input
+            id="task-form-title"
             bind:this={inputElement}
             bind:value={title}
             on:input={() => selectedTaskId = null}
@@ -141,7 +151,7 @@
           />
           <datalist id="task-suggestions">
             {#each existingTasks as taskTitle}
-              <option value={taskTitle} />
+              <option value={taskTitle}></option>
             {/each}
           </datalist>
           {#if selectedTaskId}
@@ -153,8 +163,9 @@
       </div>
 
       <div>
-        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">タグ</label>
+        <label for="task-form-tags" class="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">タグ</label>
         <input
+          id="task-form-tags"
           bind:value={tagsInput}
           on:keydown={handleKeydown}
           placeholder="開発, デザイン, 会議など (カンマ区切り)"
