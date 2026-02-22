@@ -116,7 +116,8 @@ pub async fn get_personal_analytics(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<Json<AnalyticsResponse>, (StatusCode, String)> {
-    let analytics = fetch_user_analytics(&state.pool, claims.organization_id, claims.user_id).await?;
+    let analytics =
+        fetch_user_analytics(&state.pool, claims.organization_id, claims.user_id).await?;
     Ok(Json(analytics))
 }
 

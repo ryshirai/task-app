@@ -32,6 +32,7 @@
                 title: log.task_title || `Task #${log.task_id}`,
                 status: log.task_status || 'todo',
                 progress_rate: log.task_progress_rate ?? 0,
+                total_duration_minutes: 0,
                 tags: log.task_tags || [],
                 start_at: log.start_at,
                 end_at: log.end_at,

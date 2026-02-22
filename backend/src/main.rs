@@ -10,60 +10,59 @@ use axum::{
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres};
 use std::net::SocketAddr;
+use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 
-use tokio::sync::broadcast;
+/// Default JWT secret used only when `JWT_SECRET` is not configured.
+///
+/// This value is intentionally unsafe for production and acts as a local
+/// development fallback.
+const DEFAULT_JWT_SECRET: &str = "default_secret_key_change_me";
 
+/// Maximum number of PostgreSQL connections in the application pool.
+const DB_MAX_CONNECTIONS: u32 = 5;
+
+/// Capacity of the in-process broadcast channel used for WebSocket fan-out.
+const WS_CHANNEL_CAPACITY: usize = 100;
+
+/// TCP port exposed by the HTTP server.
+const SERVER_PORT: u16 = 3000;
+
+/// Message broadcast to WebSocket subscribers.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct WsMessage {
+    /// Tenant boundary for the event.
     pub organization_id: i32,
+    /// Event type identifier consumed by clients.
     pub event: String,
+    /// Event payload as arbitrary JSON.
     pub payload: serde_json::Value,
 }
 
+/// Shared application state injected into handlers and middleware.
 #[derive(Clone)]
 pub struct AppState {
+    /// PostgreSQL connection pool.
     pub pool: Pool<Postgres>,
+    /// Secret key used to sign JWT tokens.
     pub jwt_secret: String,
+    /// Broadcast sender for real-time events.
     pub tx: broadcast::Sender<WsMessage>,
 }
 
-#[tokio::main]
-async fn main() {
-    dotenvy::dotenv().ok();
-
-    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let jwt_secret =
-        std::env::var("JWT_SECRET").unwrap_or_else(|_| "default_secret_key_change_me".to_string());
-
-    let pool = PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&database_url)
-        .await
-        .expect("Failed to connect to Postgres");
-
-    // Run migrations
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await
-        .expect("Failed to run migrations");
-
-    let (tx, _rx) = broadcast::channel(100);
-
-    let state = AppState {
-        pool,
-        jwt_secret,
-        tx,
-    };
-
-    let auth_routes = Router::new()
+/// Builds authentication-related routes.
+fn build_auth_routes() -> Router<AppState> {
+    Router::new()
         .route("/login", post(handlers::auth::login))
         .route("/register", post(handlers::auth::register))
         .route("/join", post(handlers::auth::join))
         .route("/forgot-password", post(handlers::auth::forgot_password))
-        .route("/reset-password", post(handlers::auth::reset_password));
+        .route("/reset-password", post(handlers::auth::reset_password))
+}
 
-    let user_routes = Router::new()
+/// Builds user management routes protected by authentication middleware.
+fn build_user_routes(state: &AppState) -> Router<AppState> {
+    Router::new()
         .route("/", get(handlers::users::get_users))
         .route(
             "/me/password",
@@ -82,19 +81,28 @@ async fn main() {
         .layer(axum_middleware::from_fn_with_state(
             state.clone(),
             middleware::auth_middleware,
-        ));
+        ))
+}
 
-    let invitation_routes = Router::new()
+/// Builds invitation routes.
+fn build_invitation_routes(state: &AppState) -> Router<AppState> {
+    Router::new()
         .route(
             "/",
             post(handlers::invitations::create_invitation).layer(
                 axum_middleware::from_fn_with_state(state.clone(), middleware::auth_middleware),
             ),
         )
-        .route("/{token}", get(handlers::invitations::get_invitation));
+        .route("/{token}", get(handlers::invitations::get_invitation))
+}
 
-    let task_routes = Router::new()
-        .route("/", get(handlers::tasks::get_tasks).post(handlers::tasks::create_task))
+/// Builds task and task-time-log routes protected by authentication.
+fn build_task_routes(state: &AppState) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/",
+            get(handlers::tasks::get_tasks).post(handlers::tasks::create_task),
+        )
         .route("/time-logs", post(handlers::tasks::add_time_log))
         .route(
             "/time-logs/{id}",
@@ -118,9 +126,12 @@ async fn main() {
         .layer(axum_middleware::from_fn_with_state(
             state.clone(),
             middleware::auth_middleware,
-        ));
+        ))
+}
 
-    let report_routes = Router::new()
+/// Builds daily report CRUD routes protected by authentication.
+fn build_report_routes(state: &AppState) -> Router<AppState> {
+    Router::new()
         .route(
             "/",
             get(handlers::reports::get_reports).post(handlers::reports::create_report),
@@ -132,17 +143,23 @@ async fn main() {
         .layer(axum_middleware::from_fn_with_state(
             state.clone(),
             middleware::auth_middleware,
-        ));
+        ))
+}
 
-    let log_routes = Router::new()
+/// Builds activity log routes protected by authentication.
+fn build_log_routes(state: &AppState) -> Router<AppState> {
+    Router::new()
         .route("/export", get(handlers::logs::export_logs))
         .route("/", get(handlers::logs::get_logs))
         .layer(axum_middleware::from_fn_with_state(
             state.clone(),
             middleware::auth_middleware,
-        ));
+        ))
+}
 
-    let notification_routes = Router::new()
+/// Builds notification routes protected by authentication.
+fn build_notification_routes(state: &AppState) -> Router<AppState> {
+    Router::new()
         .route("/", get(handlers::notifications::get_notifications))
         .route(
             "/read-all",
@@ -155,9 +172,12 @@ async fn main() {
         .layer(axum_middleware::from_fn_with_state(
             state.clone(),
             middleware::auth_middleware,
-        ));
+        ))
+}
 
-    let analytics_routes = Router::new()
+/// Builds analytics routes protected by authentication.
+fn build_analytics_routes(state: &AppState) -> Router<AppState> {
+    Router::new()
         .route(
             "/personal",
             get(handlers::analytics::get_personal_analytics),
@@ -166,16 +186,73 @@ async fn main() {
         .layer(axum_middleware::from_fn_with_state(
             state.clone(),
             middleware::auth_middleware,
-        ));
+        ))
+}
 
-    let display_group_routes = Router::new()
-        .route("/", get(handlers::groups::get_display_groups).post(handlers::groups::create_display_group))
-        .route("/{id}", axum::routing::patch(handlers::groups::update_display_group).delete(handlers::groups::delete_display_group))
+/// Builds display-group routes protected by authentication.
+fn build_display_group_routes(state: &AppState) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/",
+            get(handlers::groups::get_display_groups).post(handlers::groups::create_display_group),
+        )
+        .route(
+            "/{id}",
+            axum::routing::patch(handlers::groups::update_display_group)
+                .delete(handlers::groups::delete_display_group),
+        )
         .layer(axum_middleware::from_fn_with_state(
             state.clone(),
             middleware::auth_middleware,
-        ));
+        ))
+}
 
+/// Builds the API subtree under `/api`.
+fn build_api_routes(state: &AppState) -> Router<AppState> {
+    Router::new()
+        .nest("/auth", build_auth_routes())
+        .nest("/users", build_user_routes(state))
+        .nest("/invitations", build_invitation_routes(state))
+        .nest("/tasks", build_task_routes(state))
+        .nest("/reports", build_report_routes(state))
+        .nest("/logs", build_log_routes(state))
+        .nest("/notifications", build_notification_routes(state))
+        .nest("/analytics", build_analytics_routes(state))
+        .nest("/display-groups", build_display_group_routes(state))
+}
+
+/// Application entry point.
+///
+/// Loads environment variables, initializes shared state, runs migrations,
+/// registers HTTP routes, and starts the Axum server.
+#[tokio::main]
+async fn main() {
+    dotenvy::dotenv().ok();
+
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| DEFAULT_JWT_SECRET.to_string());
+
+    let pool = PgPoolOptions::new()
+        .max_connections(DB_MAX_CONNECTIONS)
+        .connect(&database_url)
+        .await
+        .expect("Failed to connect to Postgres");
+
+    // Run startup migrations.
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("Failed to run migrations");
+
+    let (tx, _rx) = broadcast::channel(WS_CHANNEL_CAPACITY);
+
+    let state = AppState {
+        pool,
+        jwt_secret,
+        tx,
+    };
+
+    // Top-level app router.
     let app = Router::new()
         .route(
             "/ws",
@@ -184,19 +261,11 @@ async fn main() {
                 middleware::auth_middleware,
             )),
         )
-        .nest("/api/auth", auth_routes)
-        .nest("/api/users", user_routes)
-        .nest("/api/invitations", invitation_routes)
-        .nest("/api/tasks", task_routes)
-        .nest("/api/reports", report_routes)
-        .nest("/api/logs", log_routes)
-        .nest("/api/notifications", notification_routes)
-        .nest("/api/analytics", analytics_routes)
-        .nest("/api/display-groups", display_group_routes)
+        .nest("/api", build_api_routes(&state))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+    let addr = SocketAddr::from(([0, 0, 0, 0], SERVER_PORT));
     println!("listening on {}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
