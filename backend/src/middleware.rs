@@ -38,7 +38,16 @@ pub async fn auth_middleware(
     )
     .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;
 
-    req.extensions_mut().insert(token_data.claims);
+    let mut claims = token_data.claims;
+    let latest_role: String = sqlx::query_scalar("SELECT role FROM users WHERE id = $1")
+        .bind(claims.user_id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|_| (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?
+        .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+    claims.role = latest_role;
+
+    req.extensions_mut().insert(claims);
     Ok(next.run(req).await)
 }
 

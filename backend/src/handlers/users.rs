@@ -169,3 +169,55 @@ pub async fn delete_user(
 
     Ok(StatusCode::NO_CONTENT)
 }
+
+pub async fn update_user_role(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(target_user_id): Path<i32>,
+    Json(input): Json<UpdateUserRoleInput>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    if claims.role != "admin" {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only admins can update user roles".to_string(),
+        ));
+    }
+
+    if claims.user_id == target_user_id {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "You cannot update your own role".to_string(),
+        ));
+    }
+
+    let previous_role = sqlx::query_scalar::<_, String>(
+        "SELECT role FROM users WHERE id = $1 AND organization_id = $2",
+    )
+    .bind(target_user_id)
+    .bind(claims.organization_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "User not found".to_string()))?;
+
+    sqlx::query("UPDATE users SET role = $1 WHERE id = $2 AND organization_id = $3")
+        .bind(&input.role)
+        .bind(target_user_id)
+        .bind(claims.organization_id)
+        .execute(&state.pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    log_activity(
+        &state.pool,
+        claims.organization_id,
+        claims.user_id,
+        "user_role_updated",
+        "user",
+        Some(target_user_id),
+        Some(format!("role: {} -> {}", previous_role, input.role)),
+    )
+    .await;
+
+    Ok(StatusCode::OK)
+}
