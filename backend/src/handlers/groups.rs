@@ -16,7 +16,7 @@ pub async fn get_display_groups(
          LEFT JOIN display_group_members m ON g.id = m.group_id
          WHERE g.organization_id = $1 AND g.user_id = $2
          GROUP BY g.id
-         ORDER BY g.name ASC"
+         ORDER BY g.name ASC",
     )
     .bind(claims.organization_id)
     .bind(claims.user_id)
@@ -32,7 +32,11 @@ pub async fn create_display_group(
     Extension(claims): Extension<Claims>,
     Json(input): Json<CreateDisplayGroupInput>,
 ) -> Result<(StatusCode, Json<DisplayGroup>), (StatusCode, String)> {
-    let mut tx = state.pool.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let mut tx = state
+        .pool
+        .begin()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let group = sqlx::query_as::<_, DisplayGroup>(
         "INSERT INTO display_groups (organization_id, user_id, name) VALUES ($1, $2, $3) RETURNING *"
@@ -53,7 +57,9 @@ pub async fn create_display_group(
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     }
 
-    tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    tx.commit()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let mut result = group;
     result.member_ids = input.member_ids;
@@ -67,11 +73,15 @@ pub async fn update_display_group(
     Path(id): Path<i32>,
     Json(input): Json<CreateDisplayGroupInput>,
 ) -> Result<Json<DisplayGroup>, (StatusCode, String)> {
-    let mut tx = state.pool.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let mut tx = state
+        .pool
+        .begin()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // Check ownership
     let exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM display_groups WHERE id = $1 AND user_id = $2)"
+        "SELECT EXISTS(SELECT 1 FROM display_groups WHERE id = $1 AND user_id = $2)",
     )
     .bind(id)
     .bind(claims.user_id)
@@ -84,7 +94,7 @@ pub async fn update_display_group(
     }
 
     let group = sqlx::query_as::<_, DisplayGroup>(
-        "UPDATE display_groups SET name = $1 WHERE id = $2 RETURNING *"
+        "UPDATE display_groups SET name = $1 WHERE id = $2 RETURNING *",
     )
     .bind(&input.name)
     .bind(id)
@@ -107,7 +117,9 @@ pub async fn update_display_group(
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     }
 
-    tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    tx.commit()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let mut result = group;
     result.member_ids = input.member_ids;

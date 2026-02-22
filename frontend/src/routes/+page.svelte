@@ -704,7 +704,7 @@
       start={taskFormSelection.start}
       end={taskFormSelection.end}
       member_id={taskFormSelection.member_id}
-      existingTasks={users.find(u => u.id === taskFormSelection?.member_id)?.time_logs?.map(l => l.task_title).filter((v, i, a) => v && a.indexOf(v) === i) || []}
+      existingTasks={[...new Set(users.find(u => u.id === taskFormSelection?.member_id)?.time_logs?.map(l => l.task_title).filter((t): t is string => !!t) || [])]}
       on:submit={handleTaskFormSubmit}
       on:cancel={() => taskFormSelection = null}
     />

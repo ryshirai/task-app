@@ -47,13 +47,13 @@ fn append_log_filters(
 }
 
 fn validate_date_range(query: &LogQuery) -> Result<(), (StatusCode, String)> {
-    if let (Some(start), Some(end)) = (query.start_date, query.end_date) {
-        if start > end {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                "start_date must be before or equal to end_date".to_string(),
-            ));
-        }
+    if let (Some(start), Some(end)) = (query.start_date, query.end_date)
+        && start > end
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "start_date must be before or equal to end_date".to_string(),
+        ));
     }
     Ok(())
 }

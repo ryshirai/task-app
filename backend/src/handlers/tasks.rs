@@ -29,13 +29,13 @@ async fn user_in_organization(
 }
 
 fn validate_report_date_range(query: &TaskReportQuery) -> Result<(), (StatusCode, String)> {
-    if let (Some(start), Some(end)) = (query.start_date, query.end_date) {
-        if start > end {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                "start_date must be before or equal to end_date".to_string(),
-            ));
-        }
+    if let (Some(start), Some(end)) = (query.start_date, query.end_date)
+        && start > end
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "start_date must be before or equal to end_date".to_string(),
+        ));
     }
     Ok(())
 }
@@ -123,8 +123,9 @@ fn csv_escape(value: &str) -> String {
 }
 
 fn task_report_to_csv(rows: &[TaskReportRow]) -> String {
-    let mut csv =
-        String::from("担当者,タスク名,ステータス,進捗率,タグ,開始日時,終了日時,Total Duration (Hours)\n");
+    let mut csv = String::from(
+        "担当者,タスク名,ステータス,進捗率,タグ,開始日時,終了日時,Total Duration (Hours)\n",
+    );
     let offset = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
     for row in rows {
         let tags = row
@@ -260,8 +261,12 @@ pub async fn add_time_log(
         if let Some(task) = existing_task {
             task.id
         } else {
-            let mut tx = state.pool.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-            
+            let mut tx = state
+                .pool
+                .begin()
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
             let created_task = sqlx::query_as::<_, Task>(
                 "INSERT INTO tasks (organization_id, member_id, title)
                  VALUES ($1, $2, $3)
@@ -277,7 +282,9 @@ pub async fn add_time_log(
             if let Some(tags) = &input.tags {
                 for tag_name in tags {
                     let tag_name = tag_name.trim();
-                    if tag_name.is_empty() { continue; }
+                    if tag_name.is_empty() {
+                        continue;
+                    }
                     let tag_id = sqlx::query_scalar::<_, i32>(
                         "INSERT INTO tags (organization_id, name) VALUES ($1, $2) ON CONFLICT (organization_id, name) DO UPDATE SET name = EXCLUDED.name RETURNING id"
                     )
@@ -286,7 +293,7 @@ pub async fn add_time_log(
                     .fetch_one(&mut *tx)
                     .await
                     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-                    
+
                     sqlx::query("INSERT INTO task_tags (task_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING")
                         .bind(created_task.id)
                         .bind(tag_id)
@@ -295,8 +302,10 @@ pub async fn add_time_log(
                         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
                 }
             }
-            
-            tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+            tx.commit()
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
             created_task.id
         }
     };
@@ -315,7 +324,8 @@ pub async fn add_time_log(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let time_log = fetch_time_log_with_task(&state, claims.organization_id, inserted_time_log_id).await?;
+    let time_log =
+        fetch_time_log_with_task(&state, claims.organization_id, inserted_time_log_id).await?;
 
     log_activity(
         &state.pool,
@@ -324,7 +334,10 @@ pub async fn add_time_log(
         "time_log_added",
         "task_time_log",
         Some(time_log.id),
-        Some(format!("task_id={}, user_id={}", time_log.task_id, time_log.user_id)),
+        Some(format!(
+            "task_id={}, user_id={}",
+            time_log.task_id, time_log.user_id
+        )),
     )
     .await;
 
@@ -451,10 +464,7 @@ pub async fn get_tasks(
     }
 
     if let Some(status) = query.status {
-        let statuses: Vec<String> = status
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .collect();
+        let statuses: Vec<String> = status.split(',').map(|s| s.trim().to_string()).collect();
         query_builder.push(" AND t.status = ANY(");
         query_builder.push_bind(statuses);
         query_builder.push(")");
@@ -480,7 +490,11 @@ pub async fn create_task(
         return Err((StatusCode::BAD_REQUEST, "Invalid member_id".to_string()));
     }
 
-    let mut tx = state.pool.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let mut tx = state
+        .pool
+        .begin()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let task = sqlx::query_as::<_, Task>(
         "INSERT INTO tasks (organization_id, member_id, title) VALUES ($1, $2, $3) RETURNING id, organization_id, member_id, title, status, progress_rate, created_at, NULL::text[] as tags, 0::bigint as total_duration_minutes",
@@ -495,7 +509,9 @@ pub async fn create_task(
     if let Some(tags) = &input.tags {
         for tag_name in tags {
             let tag_name = tag_name.trim();
-            if tag_name.is_empty() { continue; }
+            if tag_name.is_empty() {
+                continue;
+            }
 
             // Insert tag if not exists
             let tag_id = sqlx::query_scalar::<_, i32>(
@@ -508,16 +524,20 @@ pub async fn create_task(
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
             // Link tag to task
-            sqlx::query("INSERT INTO task_tags (task_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING")
-                .bind(task.id)
-                .bind(tag_id)
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            sqlx::query(
+                "INSERT INTO task_tags (task_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            )
+            .bind(task.id)
+            .bind(tag_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         }
     }
 
-    tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    tx.commit()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // Refetch task with tags
     let mut task = task;
@@ -564,7 +584,11 @@ pub async fn update_task(
     Path(id): Path<i32>,
     Json(input): Json<UpdateTaskInput>,
 ) -> Result<Json<Task>, (StatusCode, String)> {
-    let mut tx = state.pool.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let mut tx = state
+        .pool
+        .begin()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let current_task =
         sqlx::query_as::<_, Task>("SELECT *, NULL::text[] as tags, 0::bigint as total_duration_minutes FROM tasks WHERE id = $1 AND organization_id = $2")
@@ -575,10 +599,10 @@ pub async fn update_task(
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
             .ok_or((StatusCode::NOT_FOUND, "Task not found".to_string()))?;
 
-    if let Some(new_member_id) = input.member_id {
-        if !user_in_organization(&state, claims.organization_id, new_member_id).await? {
-            return Err((StatusCode::BAD_REQUEST, "Invalid member_id".to_string()));
-        }
+    if let Some(new_member_id) = input.member_id
+        && !user_in_organization(&state, claims.organization_id, new_member_id).await?
+    {
+        return Err((StatusCode::BAD_REQUEST, "Invalid member_id".to_string()));
     }
 
     // Update basic fields
@@ -612,7 +636,9 @@ pub async fn update_task(
 
         for tag_name in tags {
             let tag_name = tag_name.trim();
-            if tag_name.is_empty() { continue; }
+            if tag_name.is_empty() {
+                continue;
+            }
 
             let tag_id = sqlx::query_scalar::<_, i32>(
                 "INSERT INTO tags (organization_id, name) VALUES ($1, $2) ON CONFLICT (organization_id, name) DO UPDATE SET name = EXCLUDED.name RETURNING id"
@@ -623,16 +649,20 @@ pub async fn update_task(
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-            sqlx::query("INSERT INTO task_tags (task_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING")
-                .bind(id)
-                .bind(tag_id)
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            sqlx::query(
+                "INSERT INTO task_tags (task_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            )
+            .bind(id)
+            .bind(tag_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         }
     }
 
-    tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    tx.commit()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // Fetch updated task with tags and duration
     let task = sqlx::query_as::<_, Task>(
