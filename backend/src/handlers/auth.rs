@@ -1,6 +1,6 @@
 use crate::AppState;
 use crate::models::*;
-use crate::utils::is_valid_username;
+use crate::utils::{is_secure_password, is_valid_username};
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
@@ -21,6 +21,7 @@ const INVALID_CREDENTIALS_MESSAGE: &str = "Invalid username or password";
 /// Shared validation error for invalid usernames.
 const INVALID_USERNAME_MESSAGE: &str =
     "Username must contain only alphanumeric characters, underscores, or hyphens";
+const INVALID_PASSWORD_MESSAGE: &str = "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol";
 
 /// Builds JWT claims for a given authenticated user.
 fn build_claims(user: &User) -> Claims {
@@ -62,8 +63,8 @@ pub async fn login(
     State(state): State<AppState>,
     Json(input): Json<LoginInput>,
 ) -> Result<Json<LoginResponse>, (StatusCode, String)> {
-    // Step 1: Load the user by username.
-    let user = sqlx::query_as::<_, User>("SELECT id, organization_id, name, username, email, avatar_url, role FROM users WHERE username = $1")
+    // Step 1: Load the user by username or email.
+    let user = sqlx::query_as::<_, User>("SELECT id, organization_id, name, username, email, avatar_url, role FROM users WHERE username = $1 OR email = $1")
         .bind(&input.username)
         .fetch_optional(&state.pool)
         .await
@@ -111,6 +112,12 @@ pub async fn register(
         return Err((
             StatusCode::BAD_REQUEST,
             INVALID_USERNAME_MESSAGE.to_string(),
+        ));
+    }
+    if !is_secure_password(&input.password) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            INVALID_PASSWORD_MESSAGE.to_string(),
         ));
     }
 
@@ -167,6 +174,12 @@ pub async fn join(
         return Err((
             StatusCode::BAD_REQUEST,
             INVALID_USERNAME_MESSAGE.to_string(),
+        ));
+    }
+    if !is_secure_password(&input.password) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            INVALID_PASSWORD_MESSAGE.to_string(),
         ));
     }
 
@@ -259,6 +272,13 @@ pub async fn reset_password(
     State(state): State<AppState>,
     Json(input): Json<ResetPasswordInput>,
 ) -> Result<StatusCode, (StatusCode, String)> {
+    if !is_secure_password(&input.new_password) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            INVALID_PASSWORD_MESSAGE.to_string(),
+        ));
+    }
+
     // Step 1: Validate reset token and fetch associated user.
     let reset = sqlx::query_as::<_, (i32, i32)>(
         "SELECT id, user_id FROM password_resets WHERE token = $1 AND expires_at > $2",

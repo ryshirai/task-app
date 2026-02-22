@@ -11,7 +11,16 @@
     let error = '';
     let loading = false;
 
+    function isSecurePassword(value: string): boolean {
+        return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(value);
+    }
+
     async function handleRegister() {
+        if (!isSecurePassword(password)) {
+            error = 'パスワードは8文字以上で、英大文字・英小文字・数字・記号をそれぞれ含めてください。';
+            return;
+        }
+
         loading = true;
         error = '';
         try {
@@ -75,6 +84,7 @@
                             {/if}
                         </button>
                     </div>
+                    <p class="ml-1 mt-1 text-[9px] text-[var(--text-muted)]">※8文字以上、英大文字・英小文字・数字・記号を各1文字以上含めてください</p>
                 </div>
             </div>
             
