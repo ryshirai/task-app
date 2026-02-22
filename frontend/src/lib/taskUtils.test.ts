@@ -42,6 +42,15 @@ describe('upsertTimeLog', () => {
     expect(nextUsers[1].time_logs).toHaveLength(0);
   });
 
+  it('keeps untouched members as the same object reference when adding', () => {
+    const users = [makeUser(100), makeUser(200)];
+    const newTimeLog = makeTimeLog({ id: 111, user_id: 100 });
+
+    const nextUsers = upsertTimeLog(users, newTimeLog);
+
+    expect(nextUsers[1]).toBe(users[1]);
+  });
+
   it('updates an existing time log in-place for the same member', () => {
     const existingTimeLog = makeTimeLog({ id: 42, task_title: 'Before', user_id: 100 });
     const users = [makeUser(100, [existingTimeLog]), makeUser(200)];
@@ -68,6 +77,7 @@ describe('upsertTimeLog', () => {
     expect(nextUsers[0].time_logs).toHaveLength(0);
     expect(nextUsers[1].time_logs).toHaveLength(1);
     expect(nextUsers[1].time_logs![0].user_id).toBe(200);
+    expect(nextUsers[1].time_logs![0].id).toBe(77);
   });
 
   it('always sorts member time logs by start_at ascending', () => {
@@ -86,5 +96,31 @@ describe('upsertTimeLog', () => {
     const nextUsers = upsertTimeLog(users, earlyTimeLog);
 
     expect(nextUsers[0].time_logs!.map((timeLog) => timeLog.id)).toEqual([3, 2]);
+  });
+
+  it('preserves sorting when updating an existing log', () => {
+    const firstLog = makeTimeLog({
+      id: 10,
+      user_id: 100,
+      start_at: '2026-02-15T09:00:00.000+00:00'
+    });
+    const secondLog = makeTimeLog({
+      id: 20,
+      user_id: 100,
+      start_at: '2026-02-15T10:00:00.000+00:00'
+    });
+    const users = [makeUser(100, [firstLog, secondLog])];
+
+    const updatedSecondLog = makeTimeLog({
+      id: 20,
+      user_id: 100,
+      start_at: '2026-02-15T10:00:00.000+00:00',
+      task_title: 'updated'
+    });
+
+    const nextUsers = upsertTimeLog(users, updatedSecondLog);
+
+    expect(nextUsers[0].time_logs!.map((timeLog) => timeLog.id)).toEqual([10, 20]);
+    expect(nextUsers[0].time_logs![1].task_title).toBe('updated');
   });
 });
