@@ -64,7 +64,7 @@ pub async fn login(
     Json(input): Json<LoginInput>,
 ) -> Result<Json<LoginResponse>, (StatusCode, String)> {
     // Step 1: Load the user by username or email.
-    let user = sqlx::query_as::<_, User>("SELECT id, organization_id, name, username, email, avatar_url, role FROM users WHERE username = $1 OR email = $1")
+    let user = sqlx::query_as::<_, User>("SELECT id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified FROM users WHERE username = $1 OR email = $1")
         .bind(&input.username)
         .fetch_optional(&state.pool)
         .await
@@ -141,7 +141,7 @@ pub async fn register(
 
     // Step 5: Create the admin user in the new organization.
     let user = sqlx::query_as::<_, User>(
-        "INSERT INTO users (organization_id, name, username, email, password_hash, role) VALUES ($1, $2, $3, $4, $5, 'admin') RETURNING id, organization_id, name, username, email, avatar_url, role",
+        "INSERT INTO users (organization_id, name, username, email, password_hash, role, email_verified) VALUES ($1, $2, $3, $4, $5, 'admin', TRUE) RETURNING id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified",
     )
     .bind(org.0)
     .bind(&input.admin_name)
@@ -204,7 +204,7 @@ pub async fn join(
 
     // Step 4: Create the invited user.
     let user = sqlx::query_as::<_, User>(
-        "INSERT INTO users (organization_id, name, username, email, password_hash, role) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, organization_id, name, username, email, avatar_url, role",
+        "INSERT INTO users (organization_id, name, username, email, password_hash, role, email_verified) VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified",
     )
     .bind(invitation.organization_id)
     .bind(input.name)
@@ -231,7 +231,8 @@ pub async fn join(
 
 /// Creates a password-reset token for a user identified by username.
 ///
-/// The token is stored in the database and printed to stdout for local flows.
+/// The token is stored in the database and delivered through the configured
+/// email provider.
 pub async fn forgot_password(
     State(state): State<AppState>,
     Json(input): Json<ForgotPasswordInput>,
@@ -257,12 +258,21 @@ pub async fn forgot_password(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // Step 4: Emit token to stdout (existing behavior).
-    println!(
-        "PASSWORD RESET TOKEN for {}: {}",
-        user.username.unwrap_or_default(),
-        token
-    );
+    // Step 4: Send password reset email through configured provider.
+    let recipient = user
+        .email
+        .clone()
+        .or_else(|| user.username.clone())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            "User has no email or username to send reset instructions".to_string(),
+        ))?;
+
+    state
+        .email_service
+        .send_password_reset_email(&recipient, &token)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
     Ok(StatusCode::OK)
 }
@@ -309,6 +319,49 @@ pub async fn reset_password(
         .bind(reset.0)
         .execute(&state.pool)
         .await;
+
+    Ok(StatusCode::OK)
+}
+
+pub async fn verify_email(
+    State(state): State<AppState>,
+    Json(input): Json<VerifyEmailInput>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let pending_email = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT pending_email FROM users WHERE email_verification_token = $1",
+    )
+    .bind(&input.token)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((
+        StatusCode::NOT_FOUND,
+        "Invalid or expired verification token".to_string(),
+    ))?;
+
+    let Some(_email) = pending_email else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "No pending email to verify".to_string(),
+        ));
+    };
+
+    let result = sqlx::query(
+        "UPDATE users
+         SET email = pending_email,
+             pending_email = NULL,
+             email_verified = TRUE,
+             email_verification_token = NULL
+         WHERE email_verification_token = $1"
+    )
+    .bind(&input.token)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if result.rows_affected() == 0 {
+        return Err((StatusCode::NOT_FOUND, "Invalid or expired verification token".to_string()));
+    }
 
     Ok(StatusCode::OK)
 }

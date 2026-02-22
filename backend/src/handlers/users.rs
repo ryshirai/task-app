@@ -23,7 +23,7 @@ pub async fn get_users(
         Utc::now().with_timezone(&offset).date_naive()
     });
 
-    let users = sqlx::query_as::<_, User>("SELECT id, organization_id, name, username, email, avatar_url, role FROM users WHERE organization_id = $1 ORDER BY id")
+    let users = sqlx::query_as::<_, User>("SELECT id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified FROM users WHERE organization_id = $1 ORDER BY id")
         .bind(claims.organization_id)
         .fetch_all(&state.pool)
         .await
@@ -153,7 +153,7 @@ pub async fn create_user(
         .to_string();
 
     let user = sqlx::query_as::<_, User>(
-        "INSERT INTO users (organization_id, name, username, password_hash, avatar_url, role) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, organization_id, name, username, email, avatar_url, role",
+        "INSERT INTO users (organization_id, name, username, password_hash, avatar_url, role, email_verified) VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified",
     )
     .bind(claims.organization_id)
     .bind(input.name)
@@ -229,6 +229,48 @@ pub async fn update_user_role(
         "user",
         Some(target_user_id),
         Some(format!("role: {} -> {}", previous_role, input.role)),
+    )
+    .await;
+
+    Ok(StatusCode::OK)
+}
+
+pub async fn update_email(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(input): Json<UpdateEmailInput>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    if !crate::utils::is_valid_email(&input.email) {
+        return Err((StatusCode::BAD_REQUEST, "Invalid email format".to_string()));
+    }
+
+    let token = uuid::Uuid::new_v4().to_string();
+
+    sqlx::query(
+        "UPDATE users SET pending_email = $1, email_verification_token = $2 WHERE id = $3 AND organization_id = $4"
+    )
+    .bind(&input.email)
+    .bind(&token)
+    .bind(claims.user_id)
+    .bind(claims.organization_id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    state
+        .email_service
+        .send_verification_email(&input.email, &token)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    log_activity(
+        &state.pool,
+        claims.organization_id,
+        claims.user_id,
+        "update_email",
+        "user",
+        Some(claims.user_id),
+        Some(format!("Changed email to {}", input.email)),
     )
     .await;
 

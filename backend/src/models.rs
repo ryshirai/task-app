@@ -18,10 +18,14 @@ pub struct User {
     pub username: Option<String>,
     /// User email address.
     pub email: Option<String>,
+    /// New email awaiting verification before promotion to `email`.
+    pub pending_email: Option<String>,
     /// Optional avatar image URL.
     pub avatar_url: Option<String>,
     /// Role name (for example `admin` or `member`).
     pub role: String,
+    /// Whether the email address is verified.
+    pub email_verified: bool,
 }
 
 /// Task entity mapped from the `tasks` table and related projections.
@@ -444,6 +448,8 @@ pub struct RegisterInput {
 /// Request body for creating an invitation.
 #[derive(Deserialize)]
 pub struct CreateInvitationInput {
+    /// Email address to send the invitation to.
+    pub email: String,
     /// Role granted to invited users.
     pub role: String,
 }
@@ -493,6 +499,20 @@ pub struct UpdatePasswordInput {
 pub struct UpdateUserRoleInput {
     /// New role to set for the target user.
     pub role: String,
+}
+
+/// Request body for updating the authenticated user's email.
+#[derive(Deserialize)]
+pub struct UpdateEmailInput {
+    /// New email address to set.
+    pub email: String,
+}
+
+/// Request body for verifying an email address.
+#[derive(Deserialize)]
+pub struct VerifyEmailInput {
+    /// Email verification token.
+    pub token: String,
 }
 
 /// Request body for updating a report's content.

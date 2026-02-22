@@ -34,13 +34,13 @@ async fn fetch_user_analytics(
             COUNT(*) FILTER (WHERE status = 'done') AS total_completed,
             COUNT(*) FILTER (
                 WHERE status = 'done'
-                  AND end_at >= date_trunc('week', NOW() AT TIME ZONE 'Asia/Tokyo')
-                  AND end_at < date_trunc('week', NOW() AT TIME ZONE 'Asia/Tokyo') + interval '1 week'
+                  AND updated_at >= date_trunc('week', NOW() AT TIME ZONE 'Asia/Tokyo')
+                  AND updated_at < date_trunc('week', NOW() AT TIME ZONE 'Asia/Tokyo') + interval '1 week'
             ) AS completed_this_week,
             COUNT(*) FILTER (
                 WHERE status = 'done'
-                  AND end_at >= date_trunc('week', NOW() AT TIME ZONE 'Asia/Tokyo') - interval '1 week'
-                  AND end_at < date_trunc('week', NOW() AT TIME ZONE 'Asia/Tokyo')
+                  AND updated_at >= date_trunc('week', NOW() AT TIME ZONE 'Asia/Tokyo') - interval '1 week'
+                  AND updated_at < date_trunc('week', NOW() AT TIME ZONE 'Asia/Tokyo')
             ) AS completed_last_week
          FROM tasks
          WHERE organization_id = $1 AND member_id = $2",

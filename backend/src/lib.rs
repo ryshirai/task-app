@@ -1,3 +1,4 @@
+pub mod email;
 mod handlers;
 mod middleware;
 mod models;
@@ -8,6 +9,7 @@ use axum::{
     routing::{get, post},
 };
 use sqlx::{Pool, Postgres};
+use std::sync::Arc;
 use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 
@@ -31,6 +33,8 @@ pub struct AppState {
     pub jwt_secret: String,
     /// Broadcast sender for real-time events.
     pub tx: broadcast::Sender<WsMessage>,
+    /// Email delivery service abstraction.
+    pub email_service: Arc<dyn email::EmailService>,
 }
 
 /// Builds authentication-related routes.
@@ -41,6 +45,7 @@ fn build_auth_routes() -> Router<AppState> {
         .route("/join", post(handlers::auth::join))
         .route("/forgot-password", post(handlers::auth::forgot_password))
         .route("/reset-password", post(handlers::auth::reset_password))
+        .route("/verify-email", post(handlers::auth::verify_email))
 }
 
 /// Builds user management routes protected by authentication middleware.
@@ -50,6 +55,10 @@ fn build_user_routes(state: &AppState) -> Router<AppState> {
         .route(
             "/me/password",
             axum::routing::patch(handlers::users::update_password),
+        )
+        .route(
+            "/me/email",
+            axum::routing::patch(handlers::users::update_email),
         )
         .route(
             "/",

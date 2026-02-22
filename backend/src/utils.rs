@@ -1,3 +1,14 @@
+use regex::Regex;
+use std::sync::LazyLock;
+
+static EMAIL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$").unwrap()
+});
+
+pub fn is_valid_email(email: &str) -> bool {
+    EMAIL_REGEX.is_match(email)
+}
+
 pub fn is_valid_username(username: &str) -> bool {
     username
         .chars()

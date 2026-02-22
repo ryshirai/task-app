@@ -1,0 +1,46 @@
+# syntax=docker/dockerfile:1
+
+# Stage 1: Builder
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS builder
+
+# Install build dependencies with --allowerasing to resolve library conflicts (like openssl-snapsafe)
+RUN dnf update -y && \
+    dnf install -y \
+      gcc \
+      gcc-c++ \
+      make \
+      openssl-devel \
+      pkgconfig \
+      tar \
+      gzip \
+      which \
+      --allowerasing && \
+    dnf clean all
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+ENV CARGO_INCREMENTAL=0
+
+WORKDIR /app
+
+# Copy the entire project
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY migrations ./migrations
+
+# Build the lambda binary
+RUN cargo build --release --bin lambda
+
+# Stage 2: Runtime
+FROM public.ecr.aws/lambda/provided:al2023
+WORKDIR /var/task
+
+# Copy the compiled binary as 'bootstrap'
+COPY --from=builder /app/target/release/lambda /var/task/bootstrap
+
+# Ensure the binary is executable
+RUN chmod 755 /var/task/bootstrap
+
+# Directly set the entrypoint to our binary, bypassing internal scripts
+ENTRYPOINT ["/var/task/bootstrap"]

@@ -1,8 +1,8 @@
 use backend::email::{EmailService, SesEmailProvider, StdoutEmailProvider};
 use backend::{AppState, WsMessage, build_app};
+use lambda_http::{Error, run};
 use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
-use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -25,10 +25,6 @@ fn default_db_idle_timeout_seconds() -> u64 {
 
 fn default_db_max_lifetime_seconds() -> u64 {
     1800
-}
-
-fn default_port() -> u16 {
-    3000
 }
 
 fn default_email_provider() -> String {
@@ -59,8 +55,6 @@ struct Config {
     db_max_lifetime_seconds: u64,
     #[serde(rename = "JWT_SECRET", alias = "jwt_secret")]
     jwt_secret: String,
-    #[serde(rename = "PORT", alias = "port", default = "default_port")]
-    port: u16,
     #[serde(rename = "EMAIL_PROVIDER", alias = "email_provider", default = "default_email_provider")]
     email_provider: String,
     #[serde(rename = "EMAIL_FROM_ADDRESS", alias = "email_from_address")]
@@ -95,14 +89,11 @@ impl Config {
     }
 }
 
-/// Application entry point.
-///
-/// Loads environment variables, initializes shared state, runs migrations,
-/// registers HTTP routes, and starts the Axum server.
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Error> {
     dotenvy::dotenv().ok();
 
+    // This initialization runs once per warm Lambda container.
     let config = Config::from_env().expect("configuration error");
 
     let connect_options = PgConnectOptions::from_str(&config.database_url)
@@ -118,7 +109,6 @@ async fn main() {
         .expect("Failed to connect to Postgres");
 
     if config.run_migrations {
-        // Run startup migrations only when explicitly enabled.
         sqlx::migrate!("./migrations")
             .run(&pool)
             .await
@@ -152,8 +142,5 @@ async fn main() {
     };
 
     let app = build_app(state);
-    let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
-    println!("listening on {}", addr);
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    run(app).await
 }
