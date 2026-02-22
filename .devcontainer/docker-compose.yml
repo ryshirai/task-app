@@ -19,6 +19,7 @@ services:
       - dev-rustup:/home/vscode/.rustup
       - dev-node:/home/vscode/.local/share/pnpm
       - /var/run/docker.sock:/var/run/docker.sock
+      - ${OBSIDIAN_VAULT_PATH}:/workspace/obsidian-vault:cached
     working_dir: /workspace
     environment:
       - RUST_BACKTRACE=1
@@ -46,6 +47,7 @@ services:
       - dev-node:/home/vscode/.local/share/pnpm
       - ai-cache-codex:/home/vscode/.codex
       - ai-cache-gemini:/home/vscode/.gemini
+      - ${OBSIDIAN_VAULT_PATH}:/workspace/obsidian-vault:cached
     working_dir: /workspace
     environment:
       - RUST_BACKTRACE=1
