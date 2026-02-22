@@ -66,7 +66,7 @@ struct Config {
     #[serde(rename = "EMAIL_FROM_ADDRESS", alias = "email_from_address")]
     email_from_address: Option<String>,
     #[serde(rename = "AWS_REGION", alias = "aws_region")]
-    aws_region: Option<String>,
+    _aws_region: Option<String>,
     #[serde(rename = "FRONTEND_URL", alias = "frontend_url")]
     frontend_url: Option<String>,
 }
