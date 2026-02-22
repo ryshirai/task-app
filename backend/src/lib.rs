@@ -45,6 +45,7 @@ fn build_auth_routes() -> Router<AppState> {
         .route("/join", post(handlers::auth::join))
         .route("/forgot-password", post(handlers::auth::forgot_password))
         .route("/reset-password", post(handlers::auth::reset_password))
+        .route("/verify-email", post(handlers::auth::verify_email))
 }
 
 /// Builds user management routes protected by authentication middleware.
@@ -54,6 +55,10 @@ fn build_user_routes(state: &AppState) -> Router<AppState> {
         .route(
             "/me/password",
             axum::routing::patch(handlers::users::update_password),
+        )
+        .route(
+            "/me/email",
+            axum::routing::patch(handlers::users::update_email),
         )
         .route(
             "/",

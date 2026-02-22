@@ -11,6 +11,7 @@ pub trait EmailService: Send + Sync {
         token: &str,
         group_name: &str,
     ) -> Result<(), String>;
+    async fn send_verification_email(&self, to: &str, token: &str) -> Result<(), String>;
 }
 
 #[derive(Debug, Clone)]
@@ -30,6 +31,10 @@ impl StdoutEmailProvider {
     fn invitation_link(&self, token: &str) -> String {
         format!("{}/join?token={token}", self.frontend_url)
     }
+
+    fn verification_link(&self, token: &str) -> String {
+        format!("{}/verify-email?token={token}", self.frontend_url)
+    }
 }
 
 #[async_trait]
@@ -48,6 +53,14 @@ impl EmailService for StdoutEmailProvider {
         println!(
             "INVITATION EMAIL to {to} for group '{group_name}': {}",
             self.invitation_link(token)
+        );
+        Ok(())
+    }
+
+    async fn send_verification_email(&self, to: &str, token: &str) -> Result<(), String> {
+        println!(
+            "VERIFICATION EMAIL to {to}: {}",
+            self.verification_link(token)
         );
         Ok(())
     }
@@ -115,5 +128,13 @@ impl EmailService for SesEmailProvider {
             format!("You were invited to join {group_name}. Use this link to join: {join_link}");
 
         self.send_email(to, "You're Invited", &content).await
+    }
+
+    async fn send_verification_email(&self, to: &str, token: &str) -> Result<(), String> {
+        let verify_link = format!("{}/verify-email?token={token}", self.frontend_url);
+        let content =
+            format!("Please verify your email address by clicking this link: {verify_link}");
+
+        self.send_email(to, "Verify your email", &content).await
     }
 }

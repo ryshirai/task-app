@@ -322,3 +322,22 @@ pub async fn reset_password(
 
     Ok(StatusCode::OK)
 }
+
+pub async fn verify_email(
+    State(state): State<AppState>,
+    Json(input): Json<VerifyEmailInput>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let result = sqlx::query(
+        "UPDATE users SET email_verified = TRUE, email_verification_token = NULL WHERE email_verification_token = $1"
+    )
+    .bind(&input.token)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if result.rows_affected() == 0 {
+        return Err((StatusCode::NOT_FOUND, "Invalid or expired verification token".to_string()));
+    }
+
+    Ok(StatusCode::OK)
+}

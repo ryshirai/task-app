@@ -234,3 +234,45 @@ pub async fn update_user_role(
 
     Ok(StatusCode::OK)
 }
+
+pub async fn update_email(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(input): Json<UpdateEmailInput>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    if !crate::utils::is_valid_email(&input.email) {
+        return Err((StatusCode::BAD_REQUEST, "Invalid email format".to_string()));
+    }
+
+    let token = uuid::Uuid::new_v4().to_string();
+
+    sqlx::query(
+        "UPDATE users SET email = $1, email_verified = FALSE, email_verification_token = $2 WHERE id = $3 AND organization_id = $4"
+    )
+    .bind(&input.email)
+    .bind(&token)
+    .bind(claims.user_id)
+    .bind(claims.organization_id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    state
+        .email_service
+        .send_verification_email(&input.email, &token)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    log_activity(
+        &state.pool,
+        claims.organization_id,
+        claims.user_id,
+        "update_email",
+        "user",
+        Some(claims.user_id),
+        Some(format!("Changed email to {}", input.email)),
+    )
+    .await;
+
+    Ok(StatusCode::OK)
+}
