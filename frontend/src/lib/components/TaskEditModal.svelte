@@ -9,6 +9,7 @@
   
   let start_time = formatTime(new Date(timeLog.start_at));
   let end_time = formatTime(new Date(timeLog.end_at));
+  let task_description = timeLog.task_description || '';
 
   // Simple time input parsing (HH:MM -> Date)
   function parseTime(timeStr: string, baseDate: Date): Date {
@@ -34,7 +35,8 @@
     const updatedTask = {
       ...timeLog,
       start_at: toLocalISOString(newStart),
-      end_at: toLocalISOString(newEnd)
+      end_at: toLocalISOString(newEnd),
+      task_description: task_description.trim() || null
     };
     
     dispatch('save', updatedTask);
@@ -94,6 +96,17 @@
             class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
           />
         </div>
+      </div>
+
+      <div>
+        <label for="task-edit-description" class="block text-xs font-bold text-slate-500 uppercase mb-1">詳細</label>
+        <textarea
+          id="task-edit-description"
+          bind:value={task_description}
+          rows="3"
+          placeholder="タスクの詳細を入力..."
+          class="w-full resize-y px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900"
+        ></textarea>
       </div>
 
       <div class="flex justify-between items-end">

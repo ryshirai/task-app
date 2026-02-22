@@ -26,9 +26,9 @@
   }
 
   function formatStatus(status: string): string {
-    if (status === 'todo') return 'Todo';
-    if (status === 'doing') return 'Doing';
-    if (status === 'done') return 'Done';
+    if (status === 'todo') return '未着手';
+    if (status === 'doing') return '進行中';
+    if (status === 'done') return '完了';
     return status;
   }
 

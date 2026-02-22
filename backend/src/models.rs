@@ -35,6 +35,8 @@ pub struct Task {
     pub member_id: i32,
     /// Human-readable task title.
     pub title: String,
+    /// Optional free-form task description.
+    pub description: Option<String>,
     /// Current status label.
     pub status: String,
     /// Completion percentage in integer form.
@@ -87,6 +89,9 @@ pub struct TaskTimeLog {
     /// Optional denormalized task title for reporting.
     #[sqlx(default)]
     pub task_title: Option<String>,
+    /// Optional denormalized task description for reporting.
+    #[sqlx(default)]
+    pub task_description: Option<String>,
     /// Optional denormalized task status for reporting.
     #[sqlx(default)]
     pub task_status: Option<String>,
@@ -361,6 +366,8 @@ pub struct CreateTaskInput {
     pub member_id: i32,
     /// Task title.
     pub title: String,
+    /// Optional task description.
+    pub description: Option<String>,
     /// Optional tag list.
     pub tags: Option<Vec<String>>,
 }
@@ -372,6 +379,8 @@ pub struct UpdateTaskInput {
     pub member_id: Option<i32>,
     /// Optional new title.
     pub title: Option<String>,
+    /// Optional new description.
+    pub description: Option<String>,
     /// Optional new status.
     pub status: Option<String>,
     /// Optional new progress percentage.
@@ -389,6 +398,8 @@ pub struct AddTimeLogInput {
     pub task_id: Option<i32>,
     /// Optional title used when creating/associating task data.
     pub title: Option<String>,
+    /// Optional description used when creating a task.
+    pub description: Option<String>,
     /// Optional tags used with task creation/association.
     pub tags: Option<Vec<String>>,
     /// Interval start timestamp.
@@ -548,6 +559,12 @@ pub struct LogQuery {
 pub struct GetTasksQuery {
     /// Optional member/user filter.
     pub member_id: Option<i32>,
+    /// Optional display group filter.
+    pub group_id: Option<i32>,
+    /// Optional free-word query for task title, tag, and username.
+    pub q: Option<String>,
+    /// Optional date filter to fetch tasks overlapping the day.
+    pub date: Option<NaiveDate>,
     /// Optional status filter.
     pub status: Option<String>,
 }

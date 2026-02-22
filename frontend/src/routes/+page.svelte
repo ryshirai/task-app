@@ -6,7 +6,7 @@
   import DisplayGroupModal from '$lib/components/DisplayGroupModal.svelte';
   import ProfileModal from '$lib/components/ProfileModal.svelte';
   import Login from '$lib/components/Login.svelte';
-  import { type User, type TaskTimeLog, type Notification as AppNotification, type PaginatedNotifications, type DisplayGroup } from '$lib/types';
+  import { type User, type Task, type TaskTimeLog, type Notification as AppNotification, type PaginatedNotifications, type DisplayGroup } from '$lib/types';
   import { auth, logout } from '$lib/auth';
   import { toLocalISOString, getTodayJSTString, getJSTDateString, formatDateTime } from '$lib/utils';
   import { upsertTimeLog } from '$lib/taskUtils';
@@ -40,6 +40,7 @@
   let userMenu: HTMLDivElement | null = null;
   let showNavDropdown = false;
   let showUserDropdown = false;
+  let selectedTimelineMemberId: number | null = null;
 
   $: if (browser) {
     if (selectedGroupId) localStorage.setItem('glanceflow_selected_group', selectedGroupId.toString());
@@ -297,17 +298,19 @@
   }
 
   function handleOpenTaskForm(event: CustomEvent<{ member_id: number; start: Date; end: Date }>) {
+    selectedTimelineMemberId = event.detail.member_id;
     taskFormSelection = event.detail;
   }
 
-  async function handleTaskFormSubmit(event: CustomEvent<{ title: string; tags: string[]; task_id?: number; start: Date; end: Date }>) {
+  async function handleTaskFormSubmit(event: CustomEvent<{ title: string; description?: string | null; tags: string[]; task_id?: number; start: Date; end: Date }>) {
     if (!taskFormSelection) return;
-    const { title, tags, task_id, start, end } = event.detail;
+    const { title, description, tags, task_id, start, end } = event.detail;
 
     const newTaskData = {
       user_id: taskFormSelection.member_id,
       task_id: task_id || null,
       title: task_id ? null : title,
+      description: task_id ? null : (description || null),
       tags: task_id ? null : tags,
       start_at: toLocalISOString(start),
       end_at: toLocalISOString(end)
@@ -354,7 +357,30 @@
 
       if (!res.ok) throw new Error('Failed to update time log');
       
-      const savedTask = await res.json();
+      const savedTask: TaskTimeLog = await res.json();
+
+      const shouldUpdateDescription =
+        !!editingTask &&
+        updatedTask.id === editingTask.id &&
+        updatedTask.task_description !== editingTask.task_description;
+
+      if (shouldUpdateDescription) {
+        const taskUpdateRes = await fetch(`http://localhost:3000/api/tasks/${updatedTask.task_id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${$auth.token}`
+          },
+          body: JSON.stringify({
+            description: updatedTask.task_description
+          })
+        });
+
+        if (!taskUpdateRes.ok) throw new Error('Failed to update task description');
+        const savedTaskMeta: Task = await taskUpdateRes.json();
+        savedTask.task_description = savedTaskMeta.description ?? null;
+      }
+
       if (getJSTDateString(new Date(savedTask.start_at)) === selectedDate) {
         users = upsertTimeLog(users, savedTask);
       } else {
@@ -420,6 +446,22 @@
     }
   }
 
+  function handleTimelineEditTask(event: CustomEvent<TaskTimeLog>) {
+    selectedTimelineMemberId = event.detail.user_id;
+    editingTask = event.detail;
+  }
+
+  function clearTimelineMemberSelection() {
+    selectedTimelineMemberId = null;
+  }
+
+  function navigateToFocusView() {
+    const params = new URLSearchParams();
+    if (selectedDate) params.set('date', selectedDate);
+    if (selectedGroupId !== null) params.set('group_id', String(selectedGroupId));
+    goto(`/today-focus${params.toString() ? `?${params.toString()}` : ''}`);
+  }
+
 </script>
 
 {#if !$auth.token}
@@ -465,6 +507,14 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </button>
       </div>
+
+      <button
+        type="button"
+        on:click={navigateToFocusView}
+        class="px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 rounded-md transition-all text-[10px] font-black uppercase tracking-tight"
+      >
+        フォーカス表示
+      </button>
 
       <div class="relative group">
         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
@@ -515,6 +565,10 @@
               <button on:click={() => { goto('/analytics'); showNavDropdown = false; }} class="w-full text-left px-3 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
                 個人分析
+              </button>
+              <button on:click={() => { goto('/today-focus'); showNavDropdown = false; }} class="w-full text-left px-3 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+                本日のフォーカス
               </button>
               {#if $auth.user?.role === 'admin'}
                 <div class="h-px bg-slate-100 my-1"></div>
@@ -672,6 +726,15 @@
       <div class="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-auto px-2">
         {filteredUsers.length} members visible
       </div>
+      {#if selectedTimelineMemberId}
+        <button
+          type="button"
+          on:click={clearTimelineMemberSelection}
+          class="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700 hover:bg-blue-100 transition-colors"
+        >
+          朝会対象: {users.find((u) => u.id === selectedTimelineMemberId)?.name || `Member #${selectedTimelineMemberId}`} (解除)
+        </button>
+      {/if}
     </div>
 
     {#if loading}
@@ -684,7 +747,7 @@
         {baseDate}
         isAdmin={$auth.user?.role === 'admin'}
         on:openTaskForm={handleOpenTaskForm}
-        on:editTask={(e) => editingTask = e.detail}
+        on:editTask={handleTimelineEditTask}
         on:updateTask={(e) => handleUpdateTask(e)}
       />
     {/if}

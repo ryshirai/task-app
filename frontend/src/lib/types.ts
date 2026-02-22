@@ -6,6 +6,7 @@ export interface Task {
     organization_id: number;
     member_id: number;
     title: string;
+    description?: string | null;
     status: TaskStatus;
     progress_rate: number;
     tags?: string[];
@@ -24,6 +25,7 @@ export interface TaskTimeLog {
     end_at: string;
     duration_minutes: number;
     task_title?: string;
+    task_description?: string | null;
     task_status?: TaskStatus;
     task_progress_rate?: number;
     task_tags?: string[];
