@@ -64,7 +64,7 @@ pub async fn login(
     Json(input): Json<LoginInput>,
 ) -> Result<Json<LoginResponse>, (StatusCode, String)> {
     // Step 1: Load the user by username or email.
-    let user = sqlx::query_as::<_, User>("SELECT id, organization_id, name, username, email, avatar_url, role FROM users WHERE username = $1 OR email = $1")
+    let user = sqlx::query_as::<_, User>("SELECT id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified FROM users WHERE username = $1 OR email = $1")
         .bind(&input.username)
         .fetch_optional(&state.pool)
         .await
@@ -141,7 +141,7 @@ pub async fn register(
 
     // Step 5: Create the admin user in the new organization.
     let user = sqlx::query_as::<_, User>(
-        "INSERT INTO users (organization_id, name, username, email, password_hash, role) VALUES ($1, $2, $3, $4, $5, 'admin') RETURNING id, organization_id, name, username, email, avatar_url, role",
+        "INSERT INTO users (organization_id, name, username, email, password_hash, role, email_verified) VALUES ($1, $2, $3, $4, $5, 'admin', TRUE) RETURNING id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified",
     )
     .bind(org.0)
     .bind(&input.admin_name)
@@ -204,7 +204,7 @@ pub async fn join(
 
     // Step 4: Create the invited user.
     let user = sqlx::query_as::<_, User>(
-        "INSERT INTO users (organization_id, name, username, email, password_hash, role) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, organization_id, name, username, email, avatar_url, role",
+        "INSERT INTO users (organization_id, name, username, email, password_hash, role, email_verified) VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified",
     )
     .bind(invitation.organization_id)
     .bind(input.name)

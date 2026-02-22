@@ -33,39 +33,47 @@ fn default_email_provider() -> String {
 
 #[derive(Debug, Deserialize, Clone)]
 struct Config {
-    #[serde(rename = "DATABASE_URL")]
+    #[serde(rename = "DATABASE_URL", alias = "database_url")]
     database_url: String,
-    #[serde(rename = "DOMAIN")]
+    #[serde(rename = "DOMAIN", alias = "domain")]
     domain: String,
-    #[serde(rename = "DB_MAX_CONNECTIONS", default = "default_db_max_connections")]
+    #[serde(rename = "DB_MAX_CONNECTIONS", alias = "db_max_connections", default = "default_db_max_connections")]
     db_max_connections: u32,
-    #[serde(rename = "RUN_MIGRATIONS", default = "default_run_migrations")]
+    #[serde(rename = "RUN_MIGRATIONS", alias = "run_migrations", default = "default_run_migrations")]
     run_migrations: bool,
     #[serde(
         rename = "DB_IDLE_TIMEOUT_SECONDS",
+        alias = "db_idle_timeout_seconds",
         default = "default_db_idle_timeout_seconds"
     )]
     db_idle_timeout_seconds: u64,
     #[serde(
         rename = "DB_MAX_LIFETIME_SECONDS",
+        alias = "db_max_lifetime_seconds",
         default = "default_db_max_lifetime_seconds"
     )]
     db_max_lifetime_seconds: u64,
-    #[serde(rename = "JWT_SECRET")]
+    #[serde(rename = "JWT_SECRET", alias = "jwt_secret")]
     jwt_secret: String,
-    #[serde(rename = "EMAIL_PROVIDER", default = "default_email_provider")]
+    #[serde(rename = "EMAIL_PROVIDER", alias = "email_provider", default = "default_email_provider")]
     email_provider: String,
-    #[serde(rename = "EMAIL_FROM_ADDRESS")]
+    #[serde(rename = "EMAIL_FROM_ADDRESS", alias = "email_from_address")]
     email_from_address: Option<String>,
-    #[serde(rename = "AWS_REGION")]
+    #[serde(rename = "AWS_REGION", alias = "aws_region")]
     aws_region: Option<String>,
-    #[serde(rename = "FRONTEND_URL")]
+    #[serde(rename = "FRONTEND_URL", alias = "frontend_url")]
     frontend_url: Option<String>,
 }
 
 impl Config {
     fn from_env() -> Result<Self, String> {
-        envy::from_env::<Config>().map_err(|e| format!("Failed to load config from env: {e}"))
+        match envy::from_env::<Config>() {
+            Ok(config) => Ok(config),
+            Err(e) => {
+                let keys: Vec<String> = std::env::vars().map(|(k, _)| k).collect();
+                Err(format!("{} (Available keys: {:?})", e, keys))
+            }
+        }
     }
 
     fn get_email_from_address(&self) -> String {

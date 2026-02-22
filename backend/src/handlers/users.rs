@@ -23,7 +23,7 @@ pub async fn get_users(
         Utc::now().with_timezone(&offset).date_naive()
     });
 
-    let users = sqlx::query_as::<_, User>("SELECT id, organization_id, name, username, email, avatar_url, role FROM users WHERE organization_id = $1 ORDER BY id")
+    let users = sqlx::query_as::<_, User>("SELECT id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified FROM users WHERE organization_id = $1 ORDER BY id")
         .bind(claims.organization_id)
         .fetch_all(&state.pool)
         .await
@@ -153,7 +153,7 @@ pub async fn create_user(
         .to_string();
 
     let user = sqlx::query_as::<_, User>(
-        "INSERT INTO users (organization_id, name, username, password_hash, avatar_url, role) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, organization_id, name, username, email, avatar_url, role",
+        "INSERT INTO users (organization_id, name, username, password_hash, avatar_url, role, email_verified) VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified",
     )
     .bind(claims.organization_id)
     .bind(input.name)
