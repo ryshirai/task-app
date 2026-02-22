@@ -134,9 +134,9 @@
   }
 
   function getActionColor(action: string) {
-    if (action.includes('created')) return 'text-emerald-600 bg-emerald-50';
-    if (action.includes('deleted')) return 'text-red-600 bg-red-50';
-    return 'text-blue-600 bg-blue-50';
+    if (action.includes('created')) return 'bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300';
+    if (action.includes('deleted')) return 'bg-red-500/15 text-red-700 dark:bg-red-500/20 dark:text-red-300';
+    return 'bg-blue-500/15 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300';
   }
 
   function parseDetails(details?: string): { changes: LogChange[]; text: string | null } {
@@ -206,23 +206,26 @@
   }
 </script>
 
-<div class="min-h-screen bg-slate-50 flex flex-col font-sans">
-  <header class="h-12 px-6 flex items-center gap-4 bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10">
-    <button on:click={() => goto('/')} class="p-1.5 -ml-1.5 text-slate-400 hover:text-slate-600 transition-colors" aria-label="ホームへ戻る">
+{#if !$auth.initialized}
+  <div class="min-h-screen bg-surface-muted text-text-muted flex items-center justify-center font-semibold">読み込み中...</div>
+{:else}
+<div class="min-h-screen flex flex-col bg-surface-muted font-sans text-text-base">
+  <header class="sticky top-0 z-10 flex h-12 items-center gap-4 border-b border-border-base bg-surface-primary px-6 shadow-sm">
+    <button on:click={() => goto('/')} class="-ml-1.5 p-1.5 text-text-muted transition-colors hover:text-text-base" aria-label="ホームへ戻る">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
     </button>
-    <h1 class="text-sm font-black text-slate-800 tracking-tight uppercase">アクティビティログ</h1>
+    <h1 class="text-sm font-black uppercase tracking-tight text-text-base">アクティビティログ</h1>
   </header>
 
   <main class="max-w-4xl w-full mx-auto p-4 md:p-6 flex-1">
-    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-5">
-      <div class="mb-4 flex flex-wrap items-end gap-3 border-b border-slate-100 pb-4">
+    <div class="rounded-2xl border border-border-base bg-surface-primary p-4 shadow-sm md:p-5">
+      <div class="mb-4 flex flex-wrap items-end gap-3 border-b border-border-base pb-4">
         <div class="min-w-[160px]">
-          <label for="filter-user-id" class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">User</label>
+          <label for="filter-user-id" class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-text-muted">User</label>
           <select
             id="filter-user-id"
             bind:value={filterUserId}
-            class="w-full rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-700"
+            class="w-full rounded border border-border-base bg-surface-secondary px-2 py-1.5 text-xs text-text-base"
           >
             <option value="">All</option>
             {#each users as user}
@@ -231,25 +234,25 @@
           </select>
         </div>
         <div>
-          <label for="filter-start-date" class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Start Date</label>
+          <label for="filter-start-date" class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-text-muted">Start Date</label>
           <input
             id="filter-start-date"
             type="date"
             bind:value={filterStartDate}
-            class="rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-700"
+            class="rounded border border-border-base bg-surface-secondary px-2 py-1.5 text-xs text-text-base"
           />
         </div>
         <div>
-          <label for="filter-end-date" class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">End Date</label>
+          <label for="filter-end-date" class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-text-muted">End Date</label>
           <input
             id="filter-end-date"
             type="date"
             bind:value={filterEndDate}
-            class="rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-700"
+            class="rounded border border-border-base bg-surface-secondary px-2 py-1.5 text-xs text-text-base"
           />
         </div>
         <button
-          class="rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
+          class="rounded border border-border-base bg-surface-secondary px-3 py-1.5 text-xs font-semibold text-text-base disabled:opacity-50"
           on:click={applyFilters}
           disabled={loading || exporting}
         >
@@ -270,27 +273,27 @@
         </div>
       {/if}
       {#if loading}
-        <div class="text-center text-slate-400">読み込み中...</div>
+        <div class="text-center text-text-muted">読み込み中...</div>
       {:else if logs.length === 0}
-        <div class="text-center text-slate-400 italic">まだログがありません。</div>
+        <div class="text-center italic text-text-muted">まだログがありません。</div>
       {:else}
         <div class="overflow-x-auto">
           <table class="table-fixed w-full border-collapse text-xs">
             <thead>
-              <tr class="border-b border-slate-200 bg-slate-50">
-                <th class="px-3 py-1.5 text-left font-bold text-slate-600">日時</th>
-                <th class="px-3 py-1.5 text-left font-bold text-slate-600">ユーザー</th>
-                <th class="px-3 py-1.5 text-left font-bold text-slate-600">操作</th>
-                <th class="px-3 py-1.5 text-left font-bold text-slate-600">詳細</th>
+              <tr class="border-b border-border-base bg-surface-secondary">
+                <th class="px-3 py-1.5 text-left font-bold text-text-muted">日時</th>
+                <th class="px-3 py-1.5 text-left font-bold text-text-muted">ユーザー</th>
+                <th class="px-3 py-1.5 text-left font-bold text-text-muted">操作</th>
+                <th class="px-3 py-1.5 text-left font-bold text-text-muted">詳細</th>
               </tr>
             </thead>
             <tbody>
               {#each logs as log}
-                <tr class="border-b border-slate-100 align-top">
-                  <td class="px-3 py-1.5 text-slate-500 font-mono whitespace-nowrap">
+                <tr class="align-top border-b border-border-base">
+                  <td class="whitespace-nowrap px-3 py-1.5 font-mono text-text-muted">
                     {new Date(log.created_at).toLocaleString('ja-JP')}
                   </td>
-                  <td class="px-3 py-1.5 text-slate-800 font-semibold whitespace-nowrap">
+                  <td class="whitespace-nowrap px-3 py-1.5 font-semibold text-text-base">
                     {log.user_name}
                   </td>
                   <td class="px-3 py-1.5">
@@ -300,7 +303,7 @@
                       </span>
                       {#if canDeepLink(log)}
                         <button
-                          class="inline-flex items-center rounded border border-slate-300 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
+                          class="inline-flex items-center rounded border border-border-base px-1.5 py-0.5 text-[10px] font-semibold text-text-muted hover:bg-surface-secondary"
                           on:click={() => navigateToTarget(log)}
                           aria-label="Open target"
                           title="Open target"
@@ -313,16 +316,16 @@
                       {/if}
                     </div>
                   </td>
-                  <td class="px-3 py-1.5 text-slate-600 break-words whitespace-pre-wrap max-w-[480px]">
+                  <td class="max-w-[480px] break-words whitespace-pre-wrap px-3 py-1.5 text-text-muted">
                     {#if log.details}
                       {@const parsed = parseDetails(log.details)}
                       {#if parsed.changes.length > 0}
                         <div class="space-y-1">
                           {#each parsed.changes as change}
                             <div class="flex flex-wrap items-center gap-1">
-                              <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">{formatField(change.field)}</span>
+                              <span class="rounded bg-surface-secondary px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">{formatField(change.field)}</span>
                               <span class="text-red-600">{formatDetailValue(change.old)}</span>
-                              <span class="text-slate-400">→</span>
+                              <span class="text-text-muted">→</span>
                               <span class="text-emerald-600">{formatDetailValue(change.new)}</span>
                             </div>
                           {/each}
@@ -330,10 +333,10 @@
                       {:else if parsed.text}
                         {parsed.text}
                       {:else}
-                        <span class="text-slate-400 italic">-</span>
+                        <span class="italic text-text-muted">-</span>
                       {/if}
                     {:else}
-                      <span class="text-slate-400 italic">-</span>
+                      <span class="italic text-text-muted">-</span>
                     {/if}
                   </td>
                 </tr>
@@ -345,15 +348,15 @@
 
       <div class="mt-4 flex items-center justify-end gap-3 text-xs">
         <button
-          class="px-3 py-1.5 rounded border border-slate-300 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          class="rounded border border-border-base bg-surface-secondary px-3 py-1.5 text-text-base disabled:cursor-not-allowed disabled:opacity-40"
           on:click={() => changePage(currentPage - 1)}
           disabled={loading || currentPage <= 1}
         >
           Previous
         </button>
-        <span class="text-slate-500 font-mono">page {currentPage} / {totalPages}</span>
+        <span class="font-mono text-text-muted">page {currentPage} / {totalPages}</span>
         <button
-          class="px-3 py-1.5 rounded border border-slate-300 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          class="rounded border border-border-base bg-surface-secondary px-3 py-1.5 text-text-base disabled:cursor-not-allowed disabled:opacity-40"
           on:click={() => changePage(currentPage + 1)}
           disabled={loading || currentPage >= totalPages}
         >
@@ -363,3 +366,4 @@
     </div>
   </main>
 </div>
+{/if}

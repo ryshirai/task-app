@@ -43,33 +43,33 @@
     }
 </script>
 
-<div class="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-    <div class="max-w-md w-full p-8 bg-white rounded-2xl shadow-xl border border-slate-200">
-        <h1 class="text-2xl font-bold text-slate-800 mb-2 text-center">新しいパスワードの設定</h1>
+<div class="auth-shell flex items-center justify-center p-4">
+    <div class="auth-card w-full max-w-md p-8">
+        <h1 class="mb-2 text-center text-2xl font-black tracking-tight text-[var(--text-primary)]">新しいパスワードの設定</h1>
         
         {#if success}
-            <div class="bg-emerald-50 border border-emerald-100 p-4 rounded-xl text-center">
-                <p class="text-emerald-700 font-bold">更新が完了しました</p>
-                <p class="text-emerald-600 text-xs mt-1">ログイン画面に移動します...</p>
+            <div class="rounded-2xl border border-emerald-300/60 bg-emerald-100/55 p-4 text-center dark:border-emerald-900 dark:bg-emerald-950/30">
+                <p class="font-bold text-emerald-700 dark:text-emerald-200">更新が完了しました</p>
+                <p class="mt-1 text-xs text-emerald-700/85 dark:text-emerald-200/85">ログイン画面に移動します...</p>
             </div>
         {:else if error && !token}
             <div class="text-center">
-                <p class="text-red-500 font-bold mb-4">{error}</p>
-                <a href="/" class="text-blue-600 hover:underline text-sm">トップページへ</a>
+                <p class="mb-4 font-bold text-red-500 dark:text-red-300">{error}</p>
+                <a href="/" class="text-sm font-semibold text-blue-600 hover:brightness-110">トップページへ</a>
             </div>
         {:else}
             <form on:submit|preventDefault={handleReset} class="space-y-4">
-                <input type="password" bind:value={newPassword} required class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="新しいパスワード" />
-                <input type="password" bind:value={confirmPassword} required class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="確認用パスワード" />
+                <input type="password" bind:value={newPassword} required class="form-control px-4 py-2.5 text-sm focus:ring-2 transition-all" placeholder="新しいパスワード" />
+                <input type="password" bind:value={confirmPassword} required class="form-control px-4 py-2.5 text-sm focus:ring-2 transition-all" placeholder="確認用パスワード" />
                 
                 {#if error}
-                    <p class="text-red-500 text-xs">{error}</p>
+                    <p class="text-xs text-red-500 dark:text-red-300">{error}</p>
                 {/if}
 
                 <button
                     type="submit"
                     disabled={loading}
-                    class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors shadow-lg shadow-blue-100 disabled:opacity-50"
+                    class="btn-primary w-full py-3 text-sm"
                 >
                     {loading ? '更新中...' : 'パスワードを更新'}
                 </button>

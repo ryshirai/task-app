@@ -145,22 +145,25 @@
   });
 </script>
 
-<div class="min-h-screen bg-slate-50 flex flex-col font-sans">
-  <header class="h-12 px-6 flex items-center gap-4 bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10">
-    <button on:click={() => goto('/')} class="p-1.5 -ml-1.5 text-slate-400 hover:text-slate-600 transition-colors" aria-label="ホームへ戻る">
+{#if !$auth.initialized}
+  <div class="min-h-screen bg-surface-primary text-text-muted flex items-center justify-center font-semibold">読み込み中...</div>
+{:else}
+<div class="min-h-screen bg-surface-primary text-text-base flex flex-col font-sans">
+  <header class="h-12 px-6 flex items-center gap-4 bg-surface-secondary border-b border-border-base shadow-sm sticky top-0 z-10">
+    <button on:click={() => goto('/')} class="p-1.5 -ml-1.5 text-text-muted hover:text-text-base transition-colors" aria-label="ホームへ戻る">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
     </button>
-    <h1 class="text-sm font-black text-slate-800 tracking-tight uppercase">管理者タスクレポート</h1>
+    <h1 class="text-sm font-black text-text-base tracking-tight uppercase">管理者タスクレポート</h1>
   </header>
 
   <main class="max-w-7xl w-full mx-auto p-4 md:p-6 flex-1">
-    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-5">
-      <div class="mb-4 border-b border-slate-100 pb-4">
-        <h2 class="text-xs font-bold text-slate-700 mb-3">絞り込み</h2>
+    <div class="bg-surface-secondary rounded-2xl shadow-sm border border-border-base p-4 md:p-5">
+      <div class="mb-4 border-b border-border-base pb-4">
+        <h2 class="text-xs font-bold text-text-base mb-3">絞り込み</h2>
         <div class="flex flex-wrap items-end gap-3">
           <div class="min-w-[180px]">
-            <label for="member-id" class="mb-1 block text-[10px] font-bold text-slate-500">メンバー</label>
-            <select id="member-id" bind:value={filterMemberId} class="w-full rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-700">
+            <label for="member-id" class="mb-1 block text-[10px] font-bold text-text-muted">メンバー</label>
+            <select id="member-id" bind:value={filterMemberId} class="form-control rounded px-2 py-1.5 text-xs">
               <option value="">全員</option>
               {#each users as user}
                 <option value={user.id}>{user.name}</option>
@@ -169,20 +172,20 @@
           </div>
 
           <div>
-            <label for="start-date" class="mb-1 block text-[10px] font-bold text-slate-500">開始日</label>
-            <input id="start-date" type="date" bind:value={filterStartDate} class="rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-700" />
+            <label for="start-date" class="mb-1 block text-[10px] font-bold text-text-muted">開始日</label>
+            <input id="start-date" type="date" bind:value={filterStartDate} class="form-control rounded px-2 py-1.5 text-xs" />
           </div>
 
           <div>
-            <label for="end-date" class="mb-1 block text-[10px] font-bold text-slate-500">終了日</label>
-            <input id="end-date" type="date" bind:value={filterEndDate} class="rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-700" />
+            <label for="end-date" class="mb-1 block text-[10px] font-bold text-text-muted">終了日</label>
+            <input id="end-date" type="date" bind:value={filterEndDate} class="form-control rounded px-2 py-1.5 text-xs" />
           </div>
 
           <div>
-            <p class="mb-1 block text-[10px] font-bold text-slate-500">ステータス</p>
+            <p class="mb-1 block text-[10px] font-bold text-text-muted">ステータス</p>
             <div class="flex flex-wrap gap-2">
               {#each statusOptions as option}
-                <label class="inline-flex items-center gap-1 text-xs text-slate-700">
+                <label class="inline-flex items-center gap-1 text-xs text-text-base">
                   <input
                     type="checkbox"
                     checked={selectedStatuses.includes(option.value)}
@@ -195,7 +198,7 @@
           </div>
 
           <button
-            class="rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
+            class="btn-secondary rounded px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
             on:click={fetchTaskReport}
             disabled={loading || exporting}
           >
@@ -219,35 +222,35 @@
       {/if}
 
       {#if loading}
-        <div class="text-center text-slate-400">読み込み中...</div>
+        <div class="text-center text-text-muted">読み込み中...</div>
       {:else if tasks.length === 0}
-        <div class="text-center text-slate-400 italic">対象データがありません。</div>
+        <div class="text-center text-text-muted italic">対象データがありません。</div>
       {:else}
         <div class="overflow-x-auto">
           <table class="w-full border-collapse text-xs">
             <thead>
-              <tr class="border-b border-slate-200 bg-slate-50">
-                <th class="px-3 py-2 text-left font-bold text-slate-600">担当者</th>
-                <th class="px-3 py-2 text-left font-bold text-slate-600">タスク名</th>
-                <th class="px-3 py-2 text-left font-bold text-slate-600">ステータス</th>
-                <th class="px-3 py-2 text-left font-bold text-slate-600">進捗</th>
-                <th class="px-3 py-2 text-left font-bold text-slate-600">タグ</th>
-                <th class="px-3 py-2 text-left font-bold text-slate-600">開始</th>
-                <th class="px-3 py-2 text-left font-bold text-slate-600">終了</th>
-                <th class="px-3 py-2 text-left font-bold text-slate-600">Total Hours</th>
+              <tr class="border-b border-border-base bg-surface-elevated">
+                <th class="px-3 py-2 text-left font-bold text-text-muted">担当者</th>
+                <th class="px-3 py-2 text-left font-bold text-text-muted">タスク名</th>
+                <th class="px-3 py-2 text-left font-bold text-text-muted">ステータス</th>
+                <th class="px-3 py-2 text-left font-bold text-text-muted">進捗</th>
+                <th class="px-3 py-2 text-left font-bold text-text-muted">タグ</th>
+                <th class="px-3 py-2 text-left font-bold text-text-muted">開始</th>
+                <th class="px-3 py-2 text-left font-bold text-text-muted">終了</th>
+                <th class="px-3 py-2 text-left font-bold text-text-muted">Total Hours</th>
               </tr>
             </thead>
             <tbody>
               {#each tasks as task}
-                <tr class="border-b border-slate-100">
-                  <td class="px-3 py-2 text-slate-700">{task.user_name}</td>
-                  <td class="px-3 py-2 text-slate-800 font-semibold">{task.title}</td>
-                  <td class="px-3 py-2 text-slate-700">{formatStatus(task.status)}</td>
-                  <td class="px-3 py-2 text-slate-700">{task.progress_rate}%</td>
-                  <td class="px-3 py-2 text-slate-700">{task.tags?.join(', ') || '-'}</td>
-                  <td class="px-3 py-2 text-slate-700 whitespace-nowrap">{formatDateTime(task.start_at)}</td>
-                  <td class="px-3 py-2 text-slate-700 whitespace-nowrap">{formatDateTime(task.end_at)}</td>
-                  <td class="px-3 py-2 text-slate-700 whitespace-nowrap">{toHours(task.total_duration_minutes)}</td>
+                <tr class="border-b border-border-base">
+                  <td class="px-3 py-2 text-text-base">{task.user_name}</td>
+                  <td class="px-3 py-2 text-text-base font-semibold">{task.title}</td>
+                  <td class="px-3 py-2 text-text-base">{formatStatus(task.status)}</td>
+                  <td class="px-3 py-2 text-text-base">{task.progress_rate}%</td>
+                  <td class="px-3 py-2 text-text-base">{task.tags?.join(', ') || '-'}</td>
+                  <td class="px-3 py-2 text-text-base whitespace-nowrap">{formatDateTime(task.start_at)}</td>
+                  <td class="px-3 py-2 text-text-base whitespace-nowrap">{formatDateTime(task.end_at)}</td>
+                  <td class="px-3 py-2 text-text-base whitespace-nowrap">{toHours(task.total_duration_minutes)}</td>
                 </tr>
               {/each}
             </tbody>
@@ -257,3 +260,4 @@
     </div>
   </main>
 </div>
+{/if}

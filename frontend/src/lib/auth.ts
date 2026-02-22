@@ -36,9 +36,12 @@ const initialUser = isBrowser
 export const auth: Writable<AuthState> = writable<AuthState>({
   token: initialToken,
   user: initialUser,
+  initialized: false,
 });
 
 if (isBrowser) {
+  auth.update((state) => ({ ...state, initialized: true }));
+
   auth.subscribe((value) => {
     if (value.token && value.user) {
       localStorage.setItem('auth_token', value.token);
@@ -54,5 +57,5 @@ if (isBrowser) {
  * Clears current authentication state for sign-out.
  */
 export function logout() {
-  auth.set({ token: null, user: null });
+  auth.update((state) => ({ ...state, token: null, user: null }));
 }
