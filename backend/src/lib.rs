@@ -34,23 +34,45 @@ fn read_optional_env(env: &Env, key: &str) -> Option<String> {
         .or_else(|| env.var(key).ok().map(|v| v.to_string()))
 }
 
-fn cors_origin(env: &Env) -> String {
-    #[cfg(debug_assertions)]
-    {
-        let _ = env;
-        "*".to_string()
+fn normalize_origin(origin: &str) -> String {
+    origin.trim().trim_end_matches('/').to_string()
+}
+
+fn cors_origin(env: &Env, request_origin: Option<&str>) -> Option<String> {
+    let mut whitelist = vec!["http://localhost:5173".to_string()];
+    if let Some(frontend_url) = read_optional_env(env, "FRONTEND_URL") {
+        whitelist.push(frontend_url);
     }
 
-    #[cfg(not(debug_assertions))]
-    {
-        read_optional_env(env, "FRONTEND_URL")
-            .unwrap_or_else(|| "https://example.com".to_string())
+    let request_origin = request_origin.map(normalize_origin)?;
+    let is_allowed = whitelist
+        .into_iter()
+        .map(|origin| normalize_origin(&origin))
+        .any(|origin| origin == request_origin);
+
+    if is_allowed {
+        Some(request_origin)
+    } else {
+        None
     }
 }
 
-fn with_cors(mut response: Response, env: &Env) -> Result<Response> {
+fn with_cors(mut response: Response, env: &Env, request_origin: Option<&str>) -> Result<Response> {
     let headers = response.headers_mut();
-    headers.set("Access-Control-Allow-Origin", &cors_origin(env))?;
+    if let Some(origin) = cors_origin(env, request_origin) {
+        headers.set("Access-Control-Allow-Origin", &origin)?;
+    }
+    let vary_value = headers.get("Vary")?.unwrap_or_default();
+    let has_origin_vary = vary_value
+        .split(',')
+        .any(|part| part.trim().eq_ignore_ascii_case("Origin"));
+    if has_origin_vary {
+        headers.set("Vary", &vary_value)?;
+    } else if vary_value.trim().is_empty() {
+        headers.set("Vary", "Origin")?;
+    } else {
+        headers.set("Vary", &format!("{}, Origin", vary_value))?;
+    }
     headers.set(
         "Access-Control-Allow-Methods",
         "GET, POST, PUT, PATCH, DELETE, OPTIONS",
@@ -82,9 +104,10 @@ pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     console_error_panic_hook::set_once();
     #[cfg(debug_assertions)]
     console_log!("fetch: {} {}", req.method().to_string(), req.path());
+    let request_origin = req.headers().get("Origin").ok().flatten();
 
     if req.method() == Method::Options {
-        return with_cors(Response::ok("")?, &env);
+        return with_cors(Response::ok("")?, &env, request_origin.as_deref());
     }
 
     let result: Result<Response> = async {
@@ -207,7 +230,7 @@ pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     .await;
 
     match result {
-        Ok(response) => with_cors(response, &env),
+        Ok(response) => with_cors(response, &env, request_origin.as_deref()),
         Err(err) => {
             console_error!("request failed: {:?}", err);
             let response = Response::error("Internal Server Error", 500).or_else(
@@ -219,7 +242,7 @@ pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                     .map(|response| response.with_status(500))
                 },
             )?;
-            with_cors(response, &env)
+            with_cors(response, &env, request_origin.as_deref())
         }
     }
 }

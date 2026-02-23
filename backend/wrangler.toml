@@ -2,17 +2,21 @@ name = "app-worker"
 main = "build/worker/shim.mjs"
 compatibility_date = "2026-02-23"
 workers_dev = true
+preview_urls = false
+
+[[routes]]
+pattern = "gf-api.rysh.dev"
+zone_name = "rysh.dev"
+custom_domain = true
 
 [build]
 command = "worker-build --release"
 
 [vars]
 APP_ENV = "production"
-API_BASE_URL = "https://gf-api.rysh.dev"
+EMAIL_FROM_ADDRESS = "no-reply@gf.rysh.dev"
 FRONTEND_URL = "https://gf.rysh.dev"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "gf-db"
 database_id = "4f310aad-b888-4ba0-84c2-22a6b8ca222f"
-migrations_dir = "migrations"
