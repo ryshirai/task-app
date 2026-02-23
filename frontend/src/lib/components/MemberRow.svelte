@@ -2,13 +2,14 @@
   import { createEventDispatcher } from 'svelte';
   import { goto } from '$app/navigation';
   import { type User } from '$lib/types';
+  import { START_HOUR, END_HOUR } from '$lib/utils';
   import TaskBar from './TaskBar.svelte';
   import InteractionLayer from './InteractionLayer.svelte';
 
   export let member: User;
   export let baseDate: Date;
   export let isAdmin = false;
-  const hourCount = 10;
+  const hourCount = END_HOUR - START_HOUR + 1;
   const hourSegments = hourCount - 1;
   const quarterOffsets = [15, 30, 45];
   const dispatch = createEventDispatcher();
@@ -48,7 +49,7 @@
     </div>
   </div>
 
-  <div class="relative h-10 flex-1 bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_26%,transparent)]">
+  <div class="relative h-10 min-w-0 flex-1 overflow-hidden bg-[color:color-mix(in_srgb,var(--color-surface-elevated)_26%,transparent)]">
     <!-- Grid lines for each hour -->
     {#each Array(hourCount) as _, i}
       <div class="absolute top-0 bottom-0 border-l-2 border-[var(--color-border)] opacity-75" style="left: {i * (100 / hourSegments)}%;"></div>
