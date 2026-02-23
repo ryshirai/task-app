@@ -134,7 +134,7 @@
       </div>
 
       <div class="border-t border-border-base pt-4">
-        <h4 class="mb-3 text-xs font-bold uppercase tracking-widest text-text-muted">Email Address Change</h4>
+        <h4 class="mb-3 text-xs font-bold uppercase tracking-widest text-text-muted">メールアドレスの変更</h4>
         <form on:submit|preventDefault={handleUpdateEmail} class="space-y-3">
           <div>
             <p class="mb-1 block text-[10px] font-bold uppercase text-text-muted">現在のメールアドレス</p>
