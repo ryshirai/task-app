@@ -27,6 +27,11 @@
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
     "postCreateCommand": "bash -lc 'corepack enable && (cd frontend && [ -f package.json ] && pnpm -v >/dev/null 2>&1 || true)'",
-    "forwardPorts": [3000, 5173, 5432]
+    "forwardPorts": [3000, 5173, 5432, 8787],
+    "portsAttributes": {
+      "8787": {
+        "label": "Wrangler dev (--ip 0.0.0.0)"
+      }
+    }
   }
   

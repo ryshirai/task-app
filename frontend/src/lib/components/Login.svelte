@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
     import { auth } from '../auth';
     import { createEventDispatcher } from 'svelte';
 
@@ -25,7 +26,7 @@
         loading = true;
         error = '';
         try {
-            const res = await fetch('http://localhost:3000/api/auth/login', {
+            const res = await apiFetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password })

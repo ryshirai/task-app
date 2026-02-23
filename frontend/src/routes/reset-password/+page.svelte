@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
     import { onMount } from 'svelte';
     import { page } from '$app/state';
     import { goto } from '$app/navigation';
@@ -26,7 +27,7 @@
         loading = true;
         error = '';
         try {
-            const res = await fetch('http://localhost:3000/api/auth/reset-password', {
+            const res = await apiFetch('/api/auth/reset-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token, new_password: newPassword })

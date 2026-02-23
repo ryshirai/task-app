@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { goto } from '$app/navigation';
   import { browser } from '$app/environment';
   import { page } from '$app/stores';
@@ -62,7 +63,7 @@
   async function fetchDisplayGroups() {
     if (!$auth.token) return;
     try {
-      const res = await fetch('http://localhost:3000/api/display-groups', {
+      const res = await apiFetch('/api/display-groups', {
         headers: { Authorization: `Bearer ${$auth.token}` }
       });
       if (res.status === 401) {

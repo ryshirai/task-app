@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { auth } from '$lib/auth';
@@ -31,7 +32,7 @@
   }
 
   async function fetchUsers() {
-    const res = await fetch('http://localhost:3000/api/users', {
+    const res = await apiFetch('/api/users', {
       headers: { Authorization: `Bearer ${$auth.token}` }
     });
     if (!res.ok) throw new Error(`メンバー取得に失敗しました (${res.status})`);
@@ -43,7 +44,7 @@
     errorMessage = '';
     try {
       const params = buildQueryParams();
-      const res = await fetch(`http://localhost:3000/api/tasks/report?${params.toString()}`, {
+      const res = await apiFetch(`/api/tasks/report?${params.toString()}`, {
         headers: { Authorization: `Bearer ${$auth.token}` }
       });
       if (!res.ok) {
@@ -94,7 +95,7 @@
 
     try {
       const params = buildQueryParams();
-      const res = await fetch(`http://localhost:3000/api/tasks/report/export?${params.toString()}`, {
+      const res = await apiFetch(`/api/tasks/report/export?${params.toString()}`, {
         headers: { Authorization: `Bearer ${$auth.token}` }
       });
 

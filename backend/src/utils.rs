@@ -46,13 +46,7 @@ mod tests {
 
     #[test]
     fn accepts_ascii_alphanumeric_and_allowed_symbols() {
-        let valid_usernames = [
-            "alice",
-            "Alice123",
-            "bob_smith",
-            "charlie-01",
-            "A_B-C_123",
-        ];
+        let valid_usernames = ["alice", "Alice123", "bob_smith", "charlie-01", "A_B-C_123"];
 
         for username in valid_usernames {
             assert!(is_valid_username(username), "expected valid: {username}");
@@ -62,12 +56,7 @@ mod tests {
     #[test]
     fn rejects_disallowed_symbols() {
         let invalid_usernames = [
-            "john.doe",
-            "john doe",
-            "john@doe",
-            "john/doe",
-            "john+doe",
-            "name!",
+            "john.doe", "john doe", "john@doe", "john/doe", "john+doe", "name!",
         ];
 
         for username in invalid_usernames {
@@ -110,7 +99,10 @@ mod tests {
         ];
 
         for password in invalid_passwords {
-            assert!(!is_secure_password(password), "expected invalid: {password}");
+            assert!(
+                !is_secure_password(password),
+                "expected invalid: {password}"
+            );
         }
     }
 }

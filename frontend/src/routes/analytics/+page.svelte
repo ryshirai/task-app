@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { auth, logout } from '$lib/auth';
@@ -46,12 +47,12 @@
     fetchInProgress = true;
     const userId = $page.url.searchParams.get('user_id');
     const endpoint = userId
-      ? `http://localhost:3000/api/analytics/users/${userId}`
-      : 'http://localhost:3000/api/analytics/personal';
+      ? `/api/analytics/users/${userId}`
+      : '/api/analytics/personal';
 
     loading = true;
     try {
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         headers: { Authorization: `Bearer ${$auth.token}` }
       });
 

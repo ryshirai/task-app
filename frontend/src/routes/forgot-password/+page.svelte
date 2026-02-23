@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
     let username = '';
     let loading = false;
     let error = '';
@@ -9,7 +10,7 @@
         error = '';
         success = false;
         try {
-            const res = await fetch('http://localhost:3000/api/auth/forgot-password', {
+            const res = await apiFetch('/api/auth/forgot-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username })

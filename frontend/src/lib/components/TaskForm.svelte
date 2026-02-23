@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { createEventDispatcher, onMount } from 'svelte';
   import { formatTime } from '$lib/utils';
   import { auth } from '$lib/auth';
@@ -29,7 +30,7 @@
     if (!$auth.token) return;
     loadingActiveTasks = true;
     try {
-      const res = await fetch(`http://localhost:3000/api/tasks?member_id=${member_id}&status=todo,doing`, {
+      const res = await apiFetch(`/api/tasks?member_id=${member_id}&status=todo,doing`, {
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
       if (res.ok) {

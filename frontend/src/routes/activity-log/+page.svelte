@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { auth } from '$lib/auth';
@@ -31,7 +32,7 @@
 
   async function fetchUsers() {
     try {
-      const res = await fetch('http://localhost:3000/api/users', {
+      const res = await apiFetch('/api/users', {
         headers: { Authorization: `Bearer ${$auth.token}` }
       });
       if (!res.ok) throw new Error(`Failed to fetch users (${res.status})`);
@@ -47,7 +48,7 @@
     errorMessage = '';
     try {
       const params = buildQueryParams(true);
-      const res = await fetch(`http://localhost:3000/api/logs?${params.toString()}`, {
+      const res = await apiFetch(`/api/logs?${params.toString()}`, {
         headers: { Authorization: `Bearer ${$auth.token}` }
       });
       if (!res.ok) throw new Error(`Failed to fetch logs (${res.status})`);
@@ -83,8 +84,8 @@
     errorMessage = '';
     try {
       const params = buildQueryParams(false);
-      const url = `http://localhost:3000/api/logs/export?${params.toString()}`;
-      const res = await fetch(url, {
+      const url = `/api/logs/export?${params.toString()}`;
+      const res = await apiFetch(url, {
         headers: { Authorization: `Bearer ${$auth.token}` }
       });
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
     import { onMount } from 'svelte';
     import { page } from '$app/state';
     import { auth } from '../../lib/auth';
@@ -29,7 +30,7 @@
         }
 
         try {
-            const res = await fetch(`http://localhost:3000/api/invitations/${token}`);
+            const res = await apiFetch(`/api/invitations/${token}`);
             if (!res.ok) throw new Error('招待が無効か、期限が切れています。');
             invitation = await res.json();
         } catch (e: any) {
@@ -48,7 +49,7 @@
         joining = true;
         error = '';
         try {
-            const res = await fetch('http://localhost:3000/api/auth/join', {
+            const res = await apiFetch('/api/auth/join', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token, name, username, email, password })

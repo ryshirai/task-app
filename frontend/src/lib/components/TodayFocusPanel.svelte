@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { createEventDispatcher } from 'svelte';
   import { auth, logout } from '$lib/auth';
   import type { Task, User } from '$lib/types';
@@ -107,7 +108,7 @@
     if (!$auth.token || task.status === status || updatingTaskIds.has(task.id)) return;
     setUpdatingTask(task.id, true);
     try {
-      const res = await fetch(`http://localhost:3000/api/tasks/${task.id}`, {
+      const res = await apiFetch(`/api/tasks/${task.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -147,11 +148,11 @@
       if (effectiveMemberId) taskParams.set('member_id', String(effectiveMemberId));
 
       const [taskRes, usersRes] = await Promise.all([
-        fetch(`http://localhost:3000/api/tasks?${taskParams.toString()}`, {
+        apiFetch(`/api/tasks?${taskParams.toString()}`, {
           headers: { Authorization: `Bearer ${$auth.token}` },
           signal: currentAbortController.signal
         }),
-        fetch(`http://localhost:3000/api/users?date=${selectedDate}`, {
+        apiFetch(`/api/users?date=${selectedDate}`, {
           headers: { Authorization: `Bearer ${$auth.token}` },
           signal: currentAbortController.signal
         })

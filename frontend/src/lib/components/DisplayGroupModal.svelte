@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { createEventDispatcher, onMount } from 'svelte';
   import { auth } from '$lib/auth';
   import type { User, DisplayGroup } from '$lib/types';
@@ -46,11 +47,11 @@
 
     const payload = { name, member_ids: selectedMemberIds };
     const url = editingGroupId 
-      ? `http://localhost:3000/api/display-groups/${editingGroupId}`
-      : 'http://localhost:3000/api/display-groups';
+      ? `/api/display-groups/${editingGroupId}`
+      : '/api/display-groups';
     
     try {
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: editingGroupId ? 'PATCH' : 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -80,7 +81,7 @@
     if (!confirm('このグループを削除しますか？')) return;
 
     try {
-      const res = await fetch(`http://localhost:3000/api/display-groups/${id}`, {
+      const res = await apiFetch(`/api/display-groups/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });

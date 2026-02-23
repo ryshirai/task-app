@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { createEventDispatcher, onMount } from 'svelte';
   import { auth } from '../auth';
   import type { User } from '$lib/types';
@@ -15,7 +16,7 @@
 
   async function handleIssueInvitation() {
     try {
-      const res = await fetch('http://localhost:3000/api/invitations', {
+      const res = await apiFetch('/api/invitations', {
         method: 'POST',
         headers: { 
             'Content-Type': 'application/json',
@@ -62,7 +63,7 @@
   async function handleUpdateRole(memberId: number, newRole: 'admin' | 'user') {
     try {
       updatingRoleMemberId = memberId;
-      const res = await fetch(`http://localhost:3000/api/users/${memberId}/role`, {
+      const res = await apiFetch(`/api/users/${memberId}/role`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

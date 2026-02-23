@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { onMount } from 'svelte';
   import { auth } from '$lib/auth';
   import type { Task, TaskTimeLog } from '$lib/types';
@@ -14,7 +15,7 @@
   async function fetchMyTasks() {
     if (!$auth.user) return;
     try {
-      const res = await fetch(`http://localhost:3000/api/users?date=${reportDate}`, {
+      const res = await apiFetch(`/api/users?date=${reportDate}`, {
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
       if (res.ok) {
@@ -75,7 +76,7 @@
     if (!content.trim()) return;
     loading = true;
     try {
-      const res = await fetch('http://localhost:3000/api/reports', {
+      const res = await apiFetch('/api/reports', {
         method: 'POST',
         headers: { 
             'Content-Type': 'application/json',

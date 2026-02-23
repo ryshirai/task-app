@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import TimelineContainer from '$lib/components/TimelineContainer.svelte';
   import TaskForm from '$lib/components/TaskForm.svelte';
   import TaskEditModal from '$lib/components/TaskEditModal.svelte';
@@ -80,7 +81,7 @@
     if (!$auth.token || editingTask || showUserManagement || showProfile || showDisplayGroupSettings) return;
 
     try {
-      const res = await fetch(`http://localhost:3000/api/users?date=${selectedDate}`, {
+      const res = await apiFetch(`/api/users?date=${selectedDate}`, {
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
       if (!res.ok) {
@@ -106,7 +107,7 @@
   async function fetchDisplayGroups() {
     if (!$auth.token) return;
     try {
-      const res = await fetch('http://localhost:3000/api/display-groups', {
+      const res = await apiFetch('/api/display-groups', {
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
       if (res.ok) {
@@ -123,7 +124,7 @@
     if (!silent) notificationsLoading = true;
 
     try {
-      const res = await fetch('http://localhost:3000/api/notifications?page=1&per_page=20', {
+      const res = await apiFetch('/api/notifications?page=1&per_page=20', {
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
 
@@ -151,7 +152,7 @@
   async function markNotificationAsRead(notificationId: number) {
     if (!$auth.token) return;
     try {
-      const res = await fetch(`http://localhost:3000/api/notifications/${notificationId}/read`, {
+      const res = await apiFetch(`/api/notifications/${notificationId}/read`, {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
@@ -171,7 +172,7 @@
   async function markAllNotificationsAsRead() {
     if (!$auth.token) return;
     try {
-      const res = await fetch('http://localhost:3000/api/notifications/read-all', {
+      const res = await apiFetch('/api/notifications/read-all', {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
@@ -316,7 +317,7 @@
     };
 
     try {
-      const res = await fetch('http://localhost:3000/api/tasks/time-logs', {
+      const res = await apiFetch('/api/tasks/time-logs', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -342,7 +343,7 @@
   async function handleUpdateTask(event: CustomEvent<TaskTimeLog>) {
     const updatedTask = event.detail;
     try {
-      const res = await fetch(`http://localhost:3000/api/tasks/time-logs/${updatedTask.id}`, {
+      const res = await apiFetch(`/api/tasks/time-logs/${updatedTask.id}`, {
         method: 'PATCH',
         headers: { 
             'Content-Type': 'application/json',
@@ -364,7 +365,7 @@
         updatedTask.task_description !== editingTask.task_description;
 
       if (shouldUpdateDescription) {
-        const taskUpdateRes = await fetch(`http://localhost:3000/api/tasks/${updatedTask.task_id}`, {
+        const taskUpdateRes = await apiFetch(`/api/tasks/${updatedTask.task_id}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -395,7 +396,7 @@
   async function handleDeleteTask(event: CustomEvent<number>) {
     const taskId = event.detail;
     try {
-      const res = await fetch(`http://localhost:3000/api/tasks/time-logs/${taskId}`, {
+      const res = await apiFetch(`/api/tasks/time-logs/${taskId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
@@ -413,7 +414,7 @@
   async function handleAddMember(event: CustomEvent<{ name: string; username: string; password: string }>) {
     const { name, username, password } = event.detail;
     try {
-      const res = await fetch('http://localhost:3000/api/users', {
+      const res = await apiFetch('/api/users', {
         method: 'POST',
         headers: { 
             'Content-Type': 'application/json',
@@ -433,7 +434,7 @@
   async function handleDeleteMember(event: CustomEvent<number>) {
     const memberId = event.detail;
     try {
-      const res = await fetch(`http://localhost:3000/api/users/${memberId}`, {
+      const res = await apiFetch(`/api/users/${memberId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });

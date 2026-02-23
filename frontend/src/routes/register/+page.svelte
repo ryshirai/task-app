@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
     import { auth } from '../../lib/auth';
     import { goto } from '$app/navigation';
 
@@ -24,7 +25,7 @@
         loading = true;
         error = '';
         try {
-            const res = await fetch('http://localhost:3000/api/auth/register', {
+            const res = await apiFetch('/api/auth/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ organization_name, admin_name, username, email, password })
