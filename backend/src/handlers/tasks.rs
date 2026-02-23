@@ -772,18 +772,25 @@ pub async fn delete_time_log(req: Request, ctx: RouteContext<AppState>) -> Worke
             .and_then(|v| v.parse::<i64>().ok())
             .ok_or_else(|| ApiError::new(400, "invalid id"))?;
 
-        let exists = d1_query_one::<IdRow>(
+        let log_data = d1_query_one::<TaskTimeLog>(
             &ctx.data.db,
-            "SELECT id FROM task_time_logs WHERE id = ?1 AND organization_id = ?2 LIMIT 1",
+            "SELECT id, organization_id, user_id, task_id, start_at, end_at, 0 as duration_minutes, NULL as created_at,
+                    NULL as task_title, NULL as task_description, NULL as task_status,
+                    NULL as task_progress_rate, NULL as task_tags, 0 as total_duration_minutes
+             FROM task_time_logs WHERE id = ?1 AND organization_id = ?2 LIMIT 1",
             &[
                 D1Param::Integer(id),
                 D1Param::Integer(claims.organization_id),
             ],
         )
         .await?;
-        if exists.is_none() {
-            return Err(ApiError::new(404, "Time log not found"));
-        }
+
+        let log_entry = match log_data {
+            Some(l) => l,
+            None => return Err(ApiError::new(404, "Time log not found")),
+        };
+
+        let task_id = log_entry.task_id;
 
         d1_execute(
             &ctx.data.db,
@@ -794,6 +801,32 @@ pub async fn delete_time_log(req: Request, ctx: RouteContext<AppState>) -> Worke
             ],
         )
         .await?;
+
+        // Check if there are any other logs for this task
+        let other_logs = d1_query_one::<CountRow>(
+            &ctx.data.db,
+            "SELECT COUNT(*) as count FROM task_time_logs WHERE task_id = ?1 AND organization_id = ?2",
+            &[
+                D1Param::Integer(task_id),
+                D1Param::Integer(claims.organization_id),
+            ],
+        )
+        .await?;
+
+        if let Some(row) = other_logs {
+            if row.count == 0 {
+                // Orphaned task, delete it
+                let _ = d1_execute(
+                    &ctx.data.db,
+                    "DELETE FROM tasks WHERE id = ?1 AND organization_id = ?2",
+                    &[
+                        D1Param::Integer(task_id),
+                        D1Param::Integer(claims.organization_id),
+                    ],
+                )
+                .await;
+            }
+        }
 
         log_activity_d1(
             &ctx.data,

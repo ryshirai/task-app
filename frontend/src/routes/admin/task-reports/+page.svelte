@@ -78,8 +78,18 @@
     return status;
   }
 
-  function formatDateTime(iso: string): string {
-    return new Date(iso).toLocaleString('ja-JP');
+  function formatDateTime(iso: string | null | undefined): string {
+    if (!iso) return '-';
+    const date = new Date(iso);
+    // If date is invalid or near Unix epoch (1970), show hyphen
+    if (Number.isNaN(date.getTime()) || date.getTime() <= 86400000) return '-';
+    return date.toLocaleString('ja-JP', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   }
 
   function toHours(totalDurationMinutes: number): string {

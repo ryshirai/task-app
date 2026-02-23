@@ -81,9 +81,10 @@
     return endAt < Date.now();
   }
 
-  function formatDateTime(value: string) {
+  function formatDateTime(value: string | null | undefined) {
+    if (!value) return '-';
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '-';
+    if (Number.isNaN(date.getTime()) || date.getTime() <= 86400000) return '-';
     return date.toLocaleString('ja-JP', {
       month: '2-digit',
       day: '2-digit',
