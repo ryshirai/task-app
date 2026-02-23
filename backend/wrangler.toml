@@ -1,4 +1,4 @@
-name = "app-worker"
+name = "gf-app-worker"
 main = "build/worker/shim.mjs"
 compatibility_date = "2026-02-23"
 workers_dev = false

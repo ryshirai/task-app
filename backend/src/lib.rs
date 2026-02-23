@@ -24,6 +24,7 @@ mod users;
 mod ws;
 
 use serde::Serialize;
+use serde_json::json;
 use std::sync::Arc;
 use worker::*;
 
@@ -94,11 +95,6 @@ struct HealthResponse {
     status: &'static str,
 }
 
-#[derive(Serialize)]
-struct ErrorResponse {
-    error: &'static str,
-}
-
 #[event(fetch)]
 pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     console_error_panic_hook::set_once();
@@ -121,10 +117,10 @@ pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
 
                 if environment.eq_ignore_ascii_case("production") {
                     console_error!("JWT_SECRET is missing in production: {}", err);
-                    return Response::error(
-                        "Server misconfiguration: JWT_SECRET is missing",
-                        500,
-                    );
+                    return Response::from_json(
+                        &json!({"error": "Server misconfiguration: JWT_SECRET is missing"}),
+                    )
+                    .map(|response| response.with_status(500));
                 }
 
                 #[cfg(debug_assertions)]
@@ -142,10 +138,10 @@ pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                     environment
                 );
                 #[cfg(not(debug_assertions))]
-                return Response::error(
-                    "Server misconfiguration: JWT_SECRET is missing",
-                    500,
-                );
+                return Response::from_json(
+                    &json!({"error": "Server misconfiguration: JWT_SECRET is missing"}),
+                )
+                .map(|response| response.with_status(500));
             }
         };
         let frontend_url = read_optional_env(&env, "FRONTEND_URL")
@@ -234,15 +230,8 @@ pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         Ok(response) => with_cors(response, &env, request_origin.as_deref()),
         Err(err) => {
             console_error!("request failed: {:?}", err);
-            let response = Response::error("Internal Server Error", 500).or_else(
-                |response_err| {
-                    console_error!("failed to build error response: {:?}", response_err);
-                    Response::from_json(&ErrorResponse {
-                        error: "Internal Server Error",
-                    })
-                    .map(|response| response.with_status(500))
-                },
-            )?;
+            let response = Response::from_json(&json!({"error": "Internal Server Error"}))
+                .map(|response| response.with_status(500))?;
             with_cors(response, &env, request_origin.as_deref())
         }
     }
