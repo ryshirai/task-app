@@ -53,6 +53,26 @@
 
   const isoDateTimePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:\d{2})$/;
 
+  function localizeErrorMessage(message: string, fallback: string): string {
+    const normalized = message.trim();
+    if (!normalized) return fallback;
+
+    const translationMap: Array<[RegExp, string]> = [
+      [/^Failed to fetch users\b/i, 'ユーザーの取得に失敗しました'],
+      [/^Failed to fetch logs\b/i, '操作履歴の取得に失敗しました'],
+      [/^Authentication required\b/i, '認証が必要です'],
+      [/^Failed to export CSV\b/i, 'CSVのエクスポートに失敗しました']
+    ];
+
+    for (const [pattern, translated] of translationMap) {
+      if (pattern.test(normalized)) {
+        return normalized.replace(pattern, translated);
+      }
+    }
+
+    return normalized;
+  }
+
   function buildQueryParams(includePagination: boolean): URLSearchParams {
     const params = new URLSearchParams();
     if (includePagination) params.set('page', String(currentPage));
@@ -67,11 +87,11 @@
       const res = await apiFetch('/api/users', {
         headers: { Authorization: `Bearer ${$auth.token}` }
       });
-      if (!res.ok) throw new Error(`Failed to fetch users (${res.status})`);
+      if (!res.ok) throw new Error(`ユーザーの取得に失敗しました (${res.status})`);
       users = await res.json();
     } catch (e) {
       console.error(e);
-      errorMessage = e instanceof Error ? e.message : 'Failed to fetch users';
+      errorMessage = e instanceof Error ? localizeErrorMessage(e.message, 'ユーザーの取得に失敗しました') : 'ユーザーの取得に失敗しました';
     }
   }
 
@@ -83,13 +103,13 @@
       const res = await apiFetch(`/api/logs?${params.toString()}`, {
         headers: { Authorization: `Bearer ${$auth.token}` }
       });
-      if (!res.ok) throw new Error(`Failed to fetch logs (${res.status})`);
+      if (!res.ok) throw new Error(`操作履歴の取得に失敗しました (${res.status})`);
       const data = await res.json();
       logs = data.items;
       totalPages = data.total_pages;
     } catch (e) {
       console.error(e);
-      errorMessage = e instanceof Error ? e.message : 'Failed to fetch logs';
+      errorMessage = e instanceof Error ? localizeErrorMessage(e.message, '操作履歴の取得に失敗しました') : '操作履歴の取得に失敗しました';
     } finally {
       loading = false;
     }
@@ -108,7 +128,7 @@
 
   async function exportCsv() {
     if (!$auth.token) {
-      errorMessage = 'Authentication required';
+      errorMessage = '認証が必要です';
       return;
     }
 
@@ -123,7 +143,7 @@
 
       if (!res.ok) {
         const message = await res.text();
-        throw new Error(message || `Failed to export CSV (${res.status})`);
+        throw new Error(message || `CSVのエクスポートに失敗しました (${res.status})`);
       }
 
       const blob = await res.blob();
@@ -141,7 +161,7 @@
       URL.revokeObjectURL(objectUrl);
     } catch (e) {
       console.error(e);
-      errorMessage = e instanceof Error ? e.message : 'Failed to export CSV';
+      errorMessage = e instanceof Error ? localizeErrorMessage(e.message, 'CSVのエクスポートに失敗しました') : 'CSVのエクスポートに失敗しました';
     } finally {
       exporting = false;
     }
@@ -249,7 +269,7 @@
   }
 
   function formatField(field: string): string {
-    return fieldMap[field] || field.replace(/_/g, ' ');
+    return fieldMap[field] || `項目 (${field})`;
   }
 
   function formatIsoDateTime(value: string): string {

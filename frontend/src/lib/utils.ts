@@ -1,9 +1,9 @@
 // src/lib/utils.ts
 import { type Task, type TaskTimeLog } from './types';
 
-export const START_HOUR = 9;
-export const END_HOUR = 18;
-export const TOTAL_MINUTES = (END_HOUR - START_HOUR) * 60; // 540 minutes
+export const START_HOUR = 0;
+export const END_HOUR = 24;
+export const TOTAL_MINUTES = (END_HOUR - START_HOUR) * 60; // 1440 minutes
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 export const jstTimeFormatter = new Intl.DateTimeFormat('ja-JP', {
@@ -54,9 +54,9 @@ export function isSameJSTDate(d1: Date, d2: Date): boolean {
 export function getPercentage(date: Date): number {
     // Total minutes since JST midnight
     const minutesInDay = Math.floor(((date.getTime() + JST_OFFSET_MS) % (24 * 60 * 60 * 1000)) / (60 * 1000));
-    const minutesSince9AM = minutesInDay - (START_HOUR * 60);
+    const minutesSinceTimelineStart = minutesInDay - (START_HOUR * 60);
 
-    return (minutesSince9AM / TOTAL_MINUTES) * 100;
+    return (minutesSinceTimelineStart / TOTAL_MINUTES) * 100;
 }
 
 type TimeRange = Pick<Task, 'start_at' | 'end_at'> | Pick<TaskTimeLog, 'start_at' | 'end_at'>;
@@ -83,8 +83,8 @@ export function isTaskActive(item: TimeRange, now: Date): boolean {
 
 export function xToTime(x: number, width: number, baseDate: Date): Date {
     // baseDate should be 00:00 JST of the selected day
-    const minutesSince9AM = (x / width) * TOTAL_MINUTES;
-    const totalMinutesSinceMidnightJST = (START_HOUR * 60) + minutesSince9AM;
+    const minutesSinceTimelineStart = (x / width) * TOTAL_MINUTES;
+    const totalMinutesSinceMidnightJST = (START_HOUR * 60) + minutesSinceTimelineStart;
     
     const date = new Date(baseDate.getTime());
     date.setUTCMinutes(date.getUTCMinutes() + totalMinutesSinceMidnightJST);
@@ -92,8 +92,8 @@ export function xToTime(x: number, width: number, baseDate: Date): Date {
 }
 
 export function percentageToDate(percent: number, baseDate: Date): Date {
-    const minutesSince9AM = (percent / 100) * TOTAL_MINUTES;
-    const totalMinutesSinceMidnightJST = (START_HOUR * 60) + minutesSince9AM;
+    const minutesSinceTimelineStart = (percent / 100) * TOTAL_MINUTES;
+    const totalMinutesSinceMidnightJST = (START_HOUR * 60) + minutesSinceTimelineStart;
     
     const date = new Date(baseDate.getTime());
     date.setUTCMinutes(date.getUTCMinutes() + totalMinutesSinceMidnightJST);
