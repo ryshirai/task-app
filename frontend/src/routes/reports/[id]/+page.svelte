@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { onMount } from 'svelte';
   import { auth } from '$lib/auth';
   import { page } from '$app/stores';
@@ -14,7 +15,7 @@
 
   async function fetchReport() {
     try {
-      const res = await fetch(`http://localhost:3000/api/reports/${id}`, {
+      const res = await apiFetch(`/api/reports/${id}`, {
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch report');
@@ -39,7 +40,7 @@
     if (!content.trim()) return;
     saving = true;
     try {
-      const res = await fetch(`http://localhost:3000/api/reports/${id}`, {
+      const res = await apiFetch(`/api/reports/${id}`, {
         method: 'PATCH',
         headers: { 
             'Content-Type': 'application/json',

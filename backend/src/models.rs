@@ -1,328 +1,745 @@
-use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+use std::fmt;
+use worker::{D1Database, D1PreparedStatement, D1Result, wasm_bindgen::JsValue};
+
+pub type D1Row = Map<String, Value>;
+
+#[derive(Debug)]
+pub enum ModelError {
+    MissingField(&'static str),
+    InvalidType {
+        field: &'static str,
+        expected: &'static str,
+    },
+    InvalidValue {
+        field: &'static str,
+        message: String,
+    },
+    Worker(worker::Error),
+    Serde(serde_json::Error),
+}
+
+impl fmt::Display for ModelError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingField(field) => write!(f, "missing field: {field}"),
+            Self::InvalidType { field, expected } => {
+                write!(f, "invalid type for field {field}; expected {expected}")
+            }
+            Self::InvalidValue { field, message } => {
+                write!(f, "invalid value for field {field}: {message}")
+            }
+            Self::Worker(err) => write!(f, "d1 worker error: {err}"),
+            Self::Serde(err) => write!(f, "serialization error: {err}"),
+        }
+    }
+}
+
+impl std::error::Error for ModelError {}
+
+impl From<worker::Error> for ModelError {
+    fn from(value: worker::Error) -> Self {
+        Self::Worker(value)
+    }
+}
+
+impl From<serde_json::Error> for ModelError {
+    fn from(value: serde_json::Error) -> Self {
+        Self::Serde(value)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum D1Param {
+    Null,
+    Integer(i64),
+    Real(f64),
+    Text(String),
+}
+
+impl D1Param {
+    fn as_js_value(&self) -> JsValue {
+        match self {
+            Self::Null => JsValue::NULL,
+            Self::Integer(v) => JsValue::from_f64(*v as f64),
+            Self::Real(v) => JsValue::from_f64(*v),
+            Self::Text(v) => JsValue::from_str(v),
+        }
+    }
+}
+
+pub trait FromD1Row: Sized {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError>;
+}
+
+pub trait ToD1Params {
+    fn to_d1_params(&self) -> Vec<D1Param>;
+}
+
+pub async fn d1_query_all<T: FromD1Row>(
+    db: &D1Database,
+    sql: &str,
+    params: &[D1Param],
+) -> Result<Vec<T>, ModelError> {
+    let mut stmt: D1PreparedStatement = db.prepare(sql);
+    if !params.is_empty() {
+        let js_params: Vec<JsValue> = params.iter().map(D1Param::as_js_value).collect();
+        stmt = stmt.bind(&js_params)?;
+    }
+
+    let raw: D1Result = stmt.all().await?;
+    let rows: Vec<Value> = raw.results::<Value>()?;
+    rows.into_iter()
+        .map(|value| match value {
+            Value::Object(map) => T::from_d1_row(&map),
+            _ => Err(ModelError::InvalidType {
+                field: "row",
+                expected: "object",
+            }),
+        })
+        .collect()
+}
+
+pub async fn d1_query_one<T: FromD1Row>(
+    db: &D1Database,
+    sql: &str,
+    params: &[D1Param],
+) -> Result<Option<T>, ModelError> {
+    let rows = d1_query_all::<T>(db, sql, params).await?;
+    Ok(rows.into_iter().next())
+}
+
+pub async fn d1_execute(db: &D1Database, sql: &str, params: &[D1Param]) -> Result<u64, ModelError> {
+    let mut stmt: D1PreparedStatement = db.prepare(sql);
+    if !params.is_empty() {
+        let js_params: Vec<JsValue> = params.iter().map(D1Param::as_js_value).collect();
+        stmt = stmt.bind(&js_params)?;
+    }
+
+    let _ = stmt.run().await?;
+    Ok(0)
+}
+
+fn required_i64(row: &D1Row, field: &'static str) -> Result<i64, ModelError> {
+    let value = row.get(field).ok_or(ModelError::MissingField(field))?;
+    match value {
+        Value::Number(n) => n.as_i64().ok_or(ModelError::InvalidType {
+            field,
+            expected: "integer",
+        }),
+        Value::String(s) => s.parse::<i64>().map_err(|_| ModelError::InvalidType {
+            field,
+            expected: "integer",
+        }),
+        _ => Err(ModelError::InvalidType {
+            field,
+            expected: "integer",
+        }),
+    }
+}
+
+fn optional_i64(row: &D1Row, field: &'static str) -> Result<Option<i64>, ModelError> {
+    match row.get(field) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Number(n)) => n.as_i64().map(Some).ok_or(ModelError::InvalidType {
+            field,
+            expected: "integer",
+        }),
+        Some(Value::String(s)) => s
+            .parse::<i64>()
+            .map(Some)
+            .map_err(|_| ModelError::InvalidType {
+                field,
+                expected: "integer",
+            }),
+        Some(_) => Err(ModelError::InvalidType {
+            field,
+            expected: "integer",
+        }),
+    }
+}
+
+fn required_text(row: &D1Row, field: &'static str) -> Result<String, ModelError> {
+    row.get(field)
+        .ok_or(ModelError::MissingField(field))?
+        .as_str()
+        .map(ToOwned::to_owned)
+        .ok_or(ModelError::InvalidType {
+            field,
+            expected: "text",
+        })
+}
+
+fn optional_text(row: &D1Row, field: &'static str) -> Result<Option<String>, ModelError> {
+    match row.get(field) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(v)) => Ok(Some(v.clone())),
+        Some(_) => Err(ModelError::InvalidType {
+            field,
+            expected: "text",
+        }),
+    }
+}
+
+fn optional_text_vec(row: &D1Row, field: &'static str) -> Result<Option<Vec<String>>, ModelError> {
+    match row.get(field) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Array(items)) => items
+            .iter()
+            .map(|item| {
+                item.as_str()
+                    .map(ToOwned::to_owned)
+                    .ok_or(ModelError::InvalidType {
+                        field,
+                        expected: "array<string>",
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map(Some),
+        Some(Value::String(raw)) => {
+            if raw.trim().is_empty() {
+                return Ok(Some(vec![]));
+            }
+
+            match serde_json::from_str::<Vec<String>>(raw) {
+                Ok(parsed) => Ok(Some(parsed)),
+                Err(_) => Ok(Some(raw.split(',').map(|s| s.trim().to_string()).collect())),
+            }
+        }
+        Some(_) => Err(ModelError::InvalidType {
+            field,
+            expected: "array<string>|json-string|csv-string",
+        }),
+    }
+}
+
+fn required_bool_int(row: &D1Row, field: &'static str) -> Result<i64, ModelError> {
+    let value = required_i64(row, field)?;
+    if value == 0 || value == 1 {
+        Ok(value)
+    } else {
+        Err(ModelError::InvalidValue {
+            field,
+            message: "expected 0 or 1".to_string(),
+        })
+    }
+}
+
+fn optional_bool_int(row: &D1Row, field: &'static str) -> Result<Option<i64>, ModelError> {
+    let value = optional_i64(row, field)?;
+    match value {
+        None => Ok(None),
+        Some(v) if v == 0 || v == 1 => Ok(Some(v)),
+        Some(_) => Err(ModelError::InvalidValue {
+            field,
+            message: "expected 0 or 1".to_string(),
+        }),
+    }
+}
 
 // =============================
 // Database Entities
 // =============================
 
-/// Application user entity mapped from the `users` table.
-#[derive(Serialize, Deserialize, sqlx::FromRow, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct User {
-    /// Primary key of the user.
-    pub id: i32,
-    /// Organization (tenant) identifier the user belongs to.
-    pub organization_id: i32,
-    /// Display name of the user.
+    pub id: i64,
+    pub organization_id: i64,
     pub name: String,
-    /// Unique username used for login and identity references.
     pub username: Option<String>,
-    /// User email address.
     pub email: Option<String>,
-    /// New email awaiting verification before promotion to `email`.
     pub pending_email: Option<String>,
-    /// Optional avatar image URL.
     pub avatar_url: Option<String>,
-    /// Role name (for example `admin` or `member`).
     pub role: String,
-    /// Whether the email address is verified.
-    pub email_verified: bool,
+    pub email_verified: i64,
+    pub created_at: Option<String>,
 }
 
-/// Task entity mapped from the `tasks` table and related projections.
-#[derive(Serialize, Deserialize, sqlx::FromRow)]
+impl FromD1Row for User {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        Ok(Self {
+            id: required_i64(row, "id")?,
+            organization_id: required_i64(row, "organization_id")?,
+            name: required_text(row, "name")?,
+            username: optional_text(row, "username")?,
+            email: optional_text(row, "email")?,
+            pending_email: optional_text(row, "pending_email")?,
+            avatar_url: optional_text(row, "avatar_url")?,
+            role: required_text(row, "role")?,
+            email_verified: required_bool_int(row, "email_verified")?,
+            created_at: optional_text(row, "created_at")?,
+        })
+    }
+}
+
+impl ToD1Params for User {
+    fn to_d1_params(&self) -> Vec<D1Param> {
+        vec![
+            D1Param::Integer(self.organization_id),
+            D1Param::Text(self.name.clone()),
+            self.username
+                .as_ref()
+                .map(|v| D1Param::Text(v.clone()))
+                .unwrap_or(D1Param::Null),
+            self.email
+                .as_ref()
+                .map(|v| D1Param::Text(v.clone()))
+                .unwrap_or(D1Param::Null),
+            self.pending_email
+                .as_ref()
+                .map(|v| D1Param::Text(v.clone()))
+                .unwrap_or(D1Param::Null),
+            self.avatar_url
+                .as_ref()
+                .map(|v| D1Param::Text(v.clone()))
+                .unwrap_or(D1Param::Null),
+            D1Param::Text(self.role.clone()),
+            D1Param::Integer(self.email_verified),
+        ]
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Task {
-    /// Primary key of the task.
-    pub id: i32,
-    /// Organization (tenant) identifier the task belongs to.
-    pub organization_id: i32,
-    /// User identifier assigned to the task.
-    pub member_id: i32,
-    /// Human-readable task title.
+    pub id: i64,
+    pub organization_id: i64,
+    pub member_id: i64,
     pub title: String,
-    /// Optional free-form task description.
     pub description: Option<String>,
-    /// Current status label.
     pub status: String,
-    /// Completion percentage in integer form.
-    pub progress_rate: i32,
-    /// Optional task tags aggregated from task-tag relations.
-    #[sqlx(default)]
+    pub progress_rate: i64,
     pub tags: Option<Vec<String>>,
-    /// Task creation timestamp (UTC).
-    pub created_at: DateTime<Utc>,
-    /// Aggregated total logged minutes for this task.
-    #[sqlx(default)]
+    pub created_at: String,
+    pub updated_at: Option<String>,
     pub total_duration_minutes: i64,
 }
 
-/// User-defined display group used to group members.
-#[derive(Serialize, Deserialize, sqlx::FromRow, Clone, Debug)]
+impl FromD1Row for Task {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        Ok(Self {
+            id: required_i64(row, "id")?,
+            organization_id: required_i64(row, "organization_id")?,
+            member_id: required_i64(row, "member_id")?,
+            title: required_text(row, "title")?,
+            description: optional_text(row, "description")?,
+            status: required_text(row, "status")?,
+            progress_rate: required_i64(row, "progress_rate")?,
+            tags: optional_text_vec(row, "tags")?,
+            created_at: required_text(row, "created_at")?,
+            updated_at: optional_text(row, "updated_at")?,
+            total_duration_minutes: optional_i64(row, "total_duration_minutes")?.unwrap_or(0),
+        })
+    }
+}
+
+impl ToD1Params for Task {
+    fn to_d1_params(&self) -> Vec<D1Param> {
+        vec![
+            D1Param::Integer(self.organization_id),
+            D1Param::Integer(self.member_id),
+            D1Param::Text(self.title.clone()),
+            self.description
+                .as_ref()
+                .map(|v| D1Param::Text(v.clone()))
+                .unwrap_or(D1Param::Null),
+            D1Param::Text(self.status.clone()),
+            D1Param::Integer(self.progress_rate),
+        ]
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DisplayGroup {
-    /// Primary key of the display group.
-    pub id: i32,
-    /// Organization (tenant) identifier.
-    pub organization_id: i32,
-    /// User who owns/created this display group.
-    pub user_id: i32,
-    /// Name of the display group.
+    pub id: i64,
+    pub organization_id: i64,
+    pub user_id: i64,
     pub name: String,
-    /// Member user IDs included in this group.
-    #[sqlx(default)]
-    pub member_ids: Vec<i32>,
-    /// Group creation timestamp (UTC).
-    pub created_at: DateTime<Utc>,
+    pub member_ids: Vec<i64>,
+    pub created_at: String,
 }
 
-/// Time log record associated with a task and user.
-#[derive(Serialize, Deserialize, sqlx::FromRow, Clone, Debug)]
+impl FromD1Row for DisplayGroup {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        let member_ids = match row.get("member_ids") {
+            None | Some(Value::Null) => Vec::new(),
+            Some(Value::Array(values)) => values
+                .iter()
+                .map(|v| {
+                    v.as_i64().ok_or(ModelError::InvalidType {
+                        field: "member_ids",
+                        expected: "array<integer>",
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            Some(Value::String(raw)) => {
+                if raw.trim().is_empty() {
+                    vec![]
+                } else if let Ok(parsed) = serde_json::from_str::<Vec<i64>>(raw) {
+                    parsed
+                } else {
+                    raw.split(',')
+                        .map(|v| {
+                            v.trim()
+                                .parse::<i64>()
+                                .map_err(|_| ModelError::InvalidType {
+                                    field: "member_ids",
+                                    expected: "json-array|csv",
+                                })
+                        })
+                        .collect::<Result<Vec<_>, _>>()?
+                }
+            }
+            Some(_) => {
+                return Err(ModelError::InvalidType {
+                    field: "member_ids",
+                    expected: "array<integer>|json-string|csv-string",
+                });
+            }
+        };
+
+        Ok(Self {
+            id: required_i64(row, "id")?,
+            organization_id: required_i64(row, "organization_id")?,
+            user_id: required_i64(row, "user_id")?,
+            name: required_text(row, "name")?,
+            member_ids,
+            created_at: required_text(row, "created_at")?,
+        })
+    }
+}
+
+impl ToD1Params for DisplayGroup {
+    fn to_d1_params(&self) -> Vec<D1Param> {
+        vec![
+            D1Param::Integer(self.organization_id),
+            D1Param::Integer(self.user_id),
+            D1Param::Text(self.name.clone()),
+        ]
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TaskTimeLog {
-    /// Primary key of the time log.
-    pub id: i32,
-    /// Organization (tenant) identifier.
-    pub organization_id: i32,
-    /// User who logged this work interval.
-    pub user_id: i32,
-    /// Related task identifier.
-    pub task_id: i32,
-    /// Start time of the logged interval.
-    pub start_at: DateTime<Utc>,
-    /// End time of the logged interval.
-    pub end_at: DateTime<Utc>,
-    /// Duration of the interval in minutes.
+    pub id: i64,
+    pub organization_id: i64,
+    pub user_id: i64,
+    pub task_id: i64,
+    pub start_at: String,
+    pub end_at: String,
     pub duration_minutes: i64,
-    /// Optional denormalized task title for reporting.
-    #[sqlx(default)]
+    pub created_at: Option<String>,
     pub task_title: Option<String>,
-    /// Optional denormalized task description for reporting.
-    #[sqlx(default)]
     pub task_description: Option<String>,
-    /// Optional denormalized task status for reporting.
-    #[sqlx(default)]
     pub task_status: Option<String>,
-    /// Optional denormalized task progress for reporting.
-    #[sqlx(default)]
-    pub task_progress_rate: Option<i32>,
-    /// Optional denormalized task tags for reporting.
-    #[sqlx(default)]
+    pub task_progress_rate: Option<i64>,
     pub task_tags: Option<Vec<String>>,
-    /// Aggregated total logged minutes for the related task.
-    #[sqlx(default)]
     pub total_duration_minutes: i64,
 }
 
-/// Row projection for task reports that combines a task with user/timing stats.
-#[derive(Serialize, Deserialize, sqlx::FromRow)]
+impl FromD1Row for TaskTimeLog {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        Ok(Self {
+            id: required_i64(row, "id")?,
+            organization_id: required_i64(row, "organization_id")?,
+            user_id: required_i64(row, "user_id")?,
+            task_id: required_i64(row, "task_id")?,
+            start_at: required_text(row, "start_at")?,
+            end_at: required_text(row, "end_at")?,
+            duration_minutes: optional_i64(row, "duration_minutes")?.unwrap_or(0),
+            created_at: optional_text(row, "created_at")?,
+            task_title: optional_text(row, "task_title")?,
+            task_description: optional_text(row, "task_description")?,
+            task_status: optional_text(row, "task_status")?,
+            task_progress_rate: optional_i64(row, "task_progress_rate")?,
+            task_tags: optional_text_vec(row, "task_tags")?,
+            total_duration_minutes: optional_i64(row, "total_duration_minutes")?.unwrap_or(0),
+        })
+    }
+}
+
+impl ToD1Params for TaskTimeLog {
+    fn to_d1_params(&self) -> Vec<D1Param> {
+        vec![
+            D1Param::Integer(self.organization_id),
+            D1Param::Integer(self.user_id),
+            D1Param::Integer(self.task_id),
+            D1Param::Text(self.start_at.clone()),
+            D1Param::Text(self.end_at.clone()),
+        ]
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TaskReportRow {
-    /// Flattened task entity fields.
     #[serde(flatten)]
-    #[sqlx(flatten)]
     pub task: Task,
-    /// Name of the related user/member.
     pub user_name: String,
-    /// Total logged minutes included in this report row.
-    pub total_duration_minutes: i64,
-    /// Earliest logged start time in the selected period.
-    pub start_at: Option<DateTime<Utc>>,
-    /// Latest logged end time in the selected period.
-    pub end_at: Option<DateTime<Utc>>,
+    pub start_at: Option<String>,
+    pub end_at: Option<String>,
 }
 
-/// Activity log entity representing auditable user actions.
-#[derive(Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ActivityLog {
-    /// Primary key of the activity log entry.
-    pub id: i32,
-    /// Organization (tenant) identifier.
-    pub organization_id: i32,
-    /// User who performed the action.
-    pub user_id: i32,
-    /// Denormalized name of the acting user.
+    pub id: i64,
+    pub organization_id: i64,
+    pub user_id: i64,
     pub user_name: String,
-    /// Action identifier (for example `create`, `update`, `delete`).
     pub action: String,
-    /// Target entity type affected by the action.
     pub target_type: String,
-    /// Optional target entity ID.
-    pub target_id: Option<i32>,
-    /// Optional details payload for audit context.
+    pub target_id: Option<i64>,
     pub details: Option<String>,
-    /// Timestamp when the action was recorded.
-    pub created_at: DateTime<Utc>,
+    pub created_at: String,
 }
 
-/// Daily report entity submitted by users.
-#[derive(Serialize, Deserialize, sqlx::FromRow)]
+impl FromD1Row for ActivityLog {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        Ok(Self {
+            id: required_i64(row, "id")?,
+            organization_id: required_i64(row, "organization_id")?,
+            user_id: required_i64(row, "user_id")?,
+            user_name: required_text(row, "user_name")?,
+            action: required_text(row, "action")?,
+            target_type: required_text(row, "target_type")?,
+            target_id: optional_i64(row, "target_id")?,
+            details: optional_text(row, "details")?,
+            created_at: required_text(row, "created_at")?,
+        })
+    }
+}
+
+impl ToD1Params for ActivityLog {
+    fn to_d1_params(&self) -> Vec<D1Param> {
+        vec![
+            D1Param::Integer(self.organization_id),
+            D1Param::Integer(self.user_id),
+            D1Param::Text(self.action.clone()),
+            D1Param::Text(self.target_type.clone()),
+            self.target_id
+                .map(D1Param::Integer)
+                .unwrap_or(D1Param::Null),
+            self.details
+                .as_ref()
+                .map(|v| D1Param::Text(v.clone()))
+                .unwrap_or(D1Param::Null),
+        ]
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DailyReport {
-    /// Primary key of the daily report.
-    pub id: i32,
-    /// Organization (tenant) identifier.
-    pub organization_id: i32,
-    /// User who submitted the report.
-    pub user_id: i32,
-    /// Date that the report corresponds to.
-    pub report_date: NaiveDate,
-    /// Free-form report content.
+    pub id: i64,
+    pub organization_id: i64,
+    pub user_id: i64,
+    pub report_date: String,
     pub content: String,
-    /// Timestamp when the report was created.
-    pub created_at: DateTime<Utc>,
+    pub created_at: String,
 }
 
-/// Invitation entity used for onboarding users into organizations.
-#[derive(Serialize, Deserialize, sqlx::FromRow)]
+impl FromD1Row for DailyReport {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        Ok(Self {
+            id: required_i64(row, "id")?,
+            organization_id: required_i64(row, "organization_id")?,
+            user_id: required_i64(row, "user_id")?,
+            report_date: required_text(row, "report_date")?,
+            content: required_text(row, "content")?,
+            created_at: required_text(row, "created_at")?,
+        })
+    }
+}
+
+impl ToD1Params for DailyReport {
+    fn to_d1_params(&self) -> Vec<D1Param> {
+        vec![
+            D1Param::Integer(self.organization_id),
+            D1Param::Integer(self.user_id),
+            D1Param::Text(self.report_date.clone()),
+            D1Param::Text(self.content.clone()),
+        ]
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Invitation {
-    /// Primary key of the invitation.
-    pub id: i32,
-    /// Organization that issued the invitation.
-    pub organization_id: i32,
-    /// Optional denormalized organization name.
+    pub id: i64,
+    pub organization_id: i64,
     pub org_name: Option<String>,
-    /// Invitation token used during the join flow.
     pub token: String,
-    /// Role granted to the invited user.
     pub role: String,
-    /// Expiration timestamp of the invitation.
-    pub expires_at: DateTime<Utc>,
-    /// Invitation creation timestamp.
-    pub created_at: DateTime<Utc>,
+    pub expires_at: String,
+    pub created_at: String,
 }
 
-/// Notification entity delivered to users.
-#[derive(Serialize, Deserialize, sqlx::FromRow)]
+impl FromD1Row for Invitation {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        Ok(Self {
+            id: required_i64(row, "id")?,
+            organization_id: required_i64(row, "organization_id")?,
+            org_name: optional_text(row, "org_name")?,
+            token: required_text(row, "token")?,
+            role: required_text(row, "role")?,
+            expires_at: required_text(row, "expires_at")?,
+            created_at: required_text(row, "created_at")?,
+        })
+    }
+}
+
+impl ToD1Params for Invitation {
+    fn to_d1_params(&self) -> Vec<D1Param> {
+        vec![
+            D1Param::Integer(self.organization_id),
+            D1Param::Text(self.token.clone()),
+            D1Param::Text(self.role.clone()),
+            D1Param::Text(self.expires_at.clone()),
+        ]
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Notification {
-    /// Primary key of the notification.
-    pub id: i32,
-    /// Organization (tenant) identifier.
-    pub organization_id: i32,
-    /// Recipient user identifier.
-    pub user_id: i32,
-    /// Notification title.
+    pub id: i64,
+    pub organization_id: i64,
+    pub user_id: i64,
     pub title: String,
-    /// Optional notification body.
     pub body: Option<String>,
-    /// Category name used to classify the notification.
     pub category: String,
-    /// Optional related target type.
     pub target_type: Option<String>,
-    /// Optional related target ID.
-    pub target_id: Option<i32>,
-    /// Read-state flag.
-    pub is_read: bool,
-    /// Notification creation timestamp.
-    pub created_at: DateTime<Utc>,
+    pub target_id: Option<i64>,
+    pub is_read: i64,
+    pub created_at: String,
+}
+
+impl FromD1Row for Notification {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        Ok(Self {
+            id: required_i64(row, "id")?,
+            organization_id: required_i64(row, "organization_id")?,
+            user_id: required_i64(row, "user_id")?,
+            title: required_text(row, "title")?,
+            body: optional_text(row, "body")?,
+            category: required_text(row, "category")?,
+            target_type: optional_text(row, "target_type")?,
+            target_id: optional_i64(row, "target_id")?,
+            is_read: required_bool_int(row, "is_read")?,
+            created_at: required_text(row, "created_at")?,
+        })
+    }
+}
+
+impl ToD1Params for Notification {
+    fn to_d1_params(&self) -> Vec<D1Param> {
+        vec![
+            D1Param::Integer(self.organization_id),
+            D1Param::Integer(self.user_id),
+            D1Param::Text(self.title.clone()),
+            self.body
+                .as_ref()
+                .map(|v| D1Param::Text(v.clone()))
+                .unwrap_or(D1Param::Null),
+            D1Param::Text(self.category.clone()),
+            self.target_type
+                .as_ref()
+                .map(|v| D1Param::Text(v.clone()))
+                .unwrap_or(D1Param::Null),
+            self.target_id
+                .map(D1Param::Integer)
+                .unwrap_or(D1Param::Null),
+            D1Param::Integer(self.is_read),
+        ]
+    }
 }
 
 // =============================
 // Composite API Models
 // =============================
 
-/// User model enriched with attached time logs.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UserWithTimeLogs {
-    /// Flattened user fields.
-    #[serde(flatten)]
     pub user: User,
-    /// Time logs for the selected context.
     pub time_logs: Vec<TaskTimeLog>,
 }
 
-/// Paginated wrapper for activity logs.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PaginatedLogs {
-    /// Current page items.
     pub items: Vec<ActivityLog>,
-    /// Total number of matching records.
     pub total: i64,
-    /// Current page index (1-based or handler-defined convention).
     pub page: i64,
-    /// Total number of pages for current pagination settings.
     pub total_pages: i64,
 }
 
-/// Paginated wrapper for notifications.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PaginatedNotifications {
-    /// Current page items.
     pub items: Vec<Notification>,
-    /// Total number of matching records.
     pub total: i64,
-    /// Current page index (1-based or handler-defined convention).
     pub page: i64,
-    /// Total number of pages for current pagination settings.
     pub total_pages: i64,
 }
 
-/// Top-level analytics payload for a user.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AnalyticsResponse {
-    /// Display name of the analytics subject.
     pub user_name: String,
-    /// Task-related aggregate statistics.
     pub task_stats: TaskStats,
-    /// Report-related aggregate statistics.
     pub report_stats: ReportStats,
-    /// Daily activity counts for heatmap rendering.
     pub heatmap: Vec<HeatmapDay>,
 }
 
-/// Aggregated task metrics used in analytics responses.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TaskStats {
-    /// Lifetime completed task count.
     pub total_completed: i64,
-    /// Number of tasks completed in the current week.
     pub completed_this_week: i64,
-    /// Number of tasks completed in the previous week.
     pub completed_last_week: i64,
-    /// Task counts grouped by status.
     pub by_status: Vec<StatusCount>,
 }
 
-/// Count tuple for a specific status label.
-#[derive(Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct StatusCount {
-    /// Status label.
     pub status: String,
-    /// Number of items matching the status.
     pub count: i64,
 }
 
-/// Aggregated report metrics used in analytics responses.
-#[derive(Serialize, Deserialize)]
+impl FromD1Row for StatusCount {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        Ok(Self {
+            status: required_text(row, "status")?,
+            count: required_i64(row, "count")?,
+        })
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ReportStats {
-    /// Total number of submitted reports.
     pub total_submitted: i64,
 }
 
-/// Heatmap datapoint for a specific date.
-#[derive(Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct HeatmapDay {
-    /// Calendar day represented by this datapoint.
-    pub date: NaiveDate,
-    /// Number of events/reports/tasks counted on that day.
+    pub date: String,
     pub count: i64,
 }
 
-/// JWT claims encoded into authentication tokens.
+impl FromD1Row for HeatmapDay {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        Ok(Self {
+            date: required_text(row, "date")?,
+            count: required_i64(row, "count")?,
+        })
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
-    /// Subject identifier (username).
     pub sub: String,
-    /// Authenticated user ID.
-    pub user_id: i32,
-    /// Organization (tenant) ID.
-    pub organization_id: i32,
-    /// User role embedded for authorization checks.
+    pub user_id: i64,
+    pub organization_id: i64,
     pub role: String,
-    /// Unix timestamp expiration.
     pub exp: usize,
 }
 
-/// Login response payload returned after successful authentication.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LoginResponse {
-    /// Signed JWT access token.
     pub token: String,
-    /// Authenticated user profile.
     pub user: User,
 }
 
@@ -330,195 +747,127 @@ pub struct LoginResponse {
 // Request DTOs
 // =============================
 
-/// Request body for creating a display group.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateDisplayGroupInput {
-    /// Name of the new display group.
     pub name: String,
-    /// User IDs that should belong to the group.
-    pub member_ids: Vec<i32>,
+    pub member_ids: Vec<i64>,
 }
 
-/// Request body for login.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LoginInput {
-    /// Username used for authentication.
     pub username: String,
-    /// Plaintext password provided by the client.
     pub password: String,
 }
 
-/// Request body for creating a user.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateUserInput {
-    /// Display name for the new user.
     pub name: String,
-    /// Unique username for login.
     pub username: String,
-    /// Plaintext password to hash and store.
     pub password: String,
-    /// Optional avatar URL.
     pub avatar_url: Option<String>,
-    /// Optional role override (defaults are handled by the handler/database).
     pub role: Option<String>,
 }
 
-/// Request body for creating a task.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateTaskInput {
-    /// User assigned to the task.
-    pub member_id: i32,
-    /// Task title.
+    pub member_id: i64,
     pub title: String,
-    /// Optional task description.
     pub description: Option<String>,
-    /// Optional tag list.
     pub tags: Option<Vec<String>>,
 }
 
-/// Request body for partially updating a task.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UpdateTaskInput {
-    /// Optional reassigned member ID.
-    pub member_id: Option<i32>,
-    /// Optional new title.
+    pub member_id: Option<i64>,
     pub title: Option<String>,
-    /// Optional new description.
     pub description: Option<String>,
-    /// Optional new status.
     pub status: Option<String>,
-    /// Optional new progress percentage.
-    pub progress_rate: Option<i32>,
-    /// Optional replacement tags.
+    pub progress_rate: Option<i64>,
     pub tags: Option<Vec<String>>,
 }
 
-/// Request body for creating a task time log.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AddTimeLogInput {
-    /// User that logged this interval.
-    pub user_id: i32,
-    /// Optional existing task ID.
-    pub task_id: Option<i32>,
-    /// Optional title used when creating/associating task data.
+    pub user_id: i64,
+    pub task_id: Option<i64>,
     pub title: Option<String>,
-    /// Optional description used when creating a task.
     pub description: Option<String>,
-    /// Optional tags used with task creation/association.
+    pub status: Option<String>,
     pub tags: Option<Vec<String>>,
-    /// Interval start timestamp.
-    pub start_at: DateTime<Utc>,
-    /// Interval end timestamp.
-    pub end_at: DateTime<Utc>,
+    pub start_at: String,
+    pub end_at: String,
 }
 
-/// Request body for updating a task time log interval.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UpdateTimeLogInput {
-    /// Optional replacement start timestamp.
-    pub start_at: Option<DateTime<Utc>>,
-    /// Optional replacement end timestamp.
-    pub end_at: Option<DateTime<Utc>>,
+    pub start_at: Option<String>,
+    pub end_at: Option<String>,
 }
 
-/// Request body for creating a daily report.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateReportInput {
-    /// Report date represented by the submission.
-    pub report_date: NaiveDate,
-    /// Report content/body.
+    pub report_date: String,
     pub content: String,
 }
 
-/// Request body for organization registration.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct RegisterInput {
-    /// Name of the organization to create.
     pub organization_name: String,
-    /// Display name for the initial admin.
     pub admin_name: String,
-    /// Username for the initial admin.
     pub username: String,
-    /// Email for the initial admin.
     pub email: String,
-    /// Plaintext password for the initial admin.
     pub password: String,
 }
 
-/// Request body for creating an invitation.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateInvitationInput {
-    /// Email address to send the invitation to.
-    pub email: String,
-    /// Role granted to invited users.
+    pub email: Option<String>,
     pub role: String,
 }
 
-/// Request body for accepting an invitation.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct JoinInput {
-    /// Invitation token.
     pub token: String,
-    /// New member display name.
     pub name: String,
-    /// New member username.
     pub username: String,
-    /// New member email.
     pub email: String,
-    /// New member plaintext password.
     pub password: String,
 }
 
-/// Request body for initiating password reset.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ForgotPasswordInput {
-    /// Username of the account requesting reset.
-    pub username: String,
+    pub identity: String,
 }
 
-/// Request body for completing password reset.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ResetPasswordInput {
-    /// Password reset token.
     pub token: String,
-    /// Replacement plaintext password.
     pub new_password: String,
 }
 
-/// Request body for changing the authenticated user's password.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UpdatePasswordInput {
-    /// Current plaintext password for verification.
     pub current_password: String,
-    /// New plaintext password to set.
     pub new_password: String,
 }
 
-/// Request body for updating a user's role.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UpdateUserRoleInput {
-    /// New role to set for the target user.
     pub role: String,
 }
 
-/// Request body for updating the authenticated user's email.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UpdateEmailInput {
-    /// New email address to set.
     pub email: String,
 }
 
-/// Request body for verifying an email address.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VerifyEmailInput {
-    /// Email verification token.
     pub token: String,
 }
 
-/// Request body for updating a report's content.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UpdateReportInput {
-    /// Updated report content/body.
     pub content: String,
 }
 
@@ -526,74 +875,56 @@ pub struct UpdateReportInput {
 // Query DTOs
 // =============================
 
-/// Query parameters for filtering report lists.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ReportQuery {
-    /// Optional date filter.
-    pub date: Option<NaiveDate>,
-    /// Optional user filter.
-    pub user_id: Option<i32>,
+    pub date: Option<String>,
+    pub user_id: Option<i64>,
 }
 
-/// Query parameters for listing users.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct GetUsersQuery {
-    /// Optional date filter used by time-log/report aware user endpoints.
-    pub date: Option<NaiveDate>,
+    pub date: Option<String>,
 }
 
-/// Query parameters for task report endpoints.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TaskReportQuery {
-    /// Optional member/user filter.
-    pub member_id: Option<i32>,
-    /// Optional inclusive start date.
-    pub start_date: Option<NaiveDate>,
-    /// Optional inclusive end date.
-    pub end_date: Option<NaiveDate>,
-    /// Optional status CSV filter string.
+    pub member_id: Option<i64>,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
     pub statuses: Option<String>,
+    pub q: Option<String>,
 }
 
-/// Query parameters for activity log listing/export.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LogQuery {
-    /// Optional page number.
     pub page: Option<i64>,
-    /// Optional page size.
     pub per_page: Option<i64>,
-    /// Optional user filter.
-    pub user_id: Option<i32>,
-    /// Optional start date filter.
-    pub start_date: Option<NaiveDate>,
-    /// Optional end date filter.
-    pub end_date: Option<NaiveDate>,
-    /// Optional action filter.
+    pub user_id: Option<i64>,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
     pub action: Option<String>,
-    /// Optional target type filter.
     pub target_type: Option<String>,
 }
 
-/// Query parameters for task listing.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct GetTasksQuery {
-    /// Optional member/user filter.
-    pub member_id: Option<i32>,
-    /// Optional display group filter.
-    pub group_id: Option<i32>,
-    /// Optional free-word query for task title, tag, and username.
+    pub member_id: Option<i64>,
+    pub group_id: Option<i64>,
     pub q: Option<String>,
-    /// Optional date filter to fetch tasks overlapping the day.
-    pub date: Option<NaiveDate>,
-    /// Optional status filter.
+    pub date: Option<String>,
     pub status: Option<String>,
 }
 
-/// Query parameters for notification listing.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct NotificationQuery {
-    /// Optional page number.
     pub page: Option<i64>,
-    /// Optional page size.
     pub per_page: Option<i64>,
+}
+
+#[allow(dead_code)]
+fn _validate_boolean_helpers(row: &D1Row) -> Result<(Option<i64>, i64), ModelError> {
+    Ok((
+        optional_bool_int(row, "flag")?,
+        required_bool_int(row, "is_read")?,
+    ))
 }

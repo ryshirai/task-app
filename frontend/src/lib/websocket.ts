@@ -1,3 +1,5 @@
+import { PUBLIC_WS_BASE_URL } from '$env/static/public';
+
 export type TaskEventType = 'task_created' | 'task_updated' | 'task_deleted';
 
 export interface TaskEventMessage<T = unknown> {
@@ -12,6 +14,8 @@ interface WebSocketClientOptions {
     reconnectBaseDelayMs?: number;
     reconnectMaxDelayMs?: number;
 }
+
+const DEFAULT_WS_BASE_URL = 'ws://localhost:3000/ws';
 
 export class TaskWebSocketClient {
     private readonly url: string;
@@ -32,7 +36,7 @@ export class TaskWebSocketClient {
 
     constructor(token: string, options: WebSocketClientOptions = {}) {
         this.token = token;
-        this.url = options.url ?? 'ws://localhost:3000/ws';
+        this.url = options.url ?? (PUBLIC_WS_BASE_URL || DEFAULT_WS_BASE_URL);
         this.reconnectBaseDelayMs = options.reconnectBaseDelayMs ?? 1000;
         this.reconnectMaxDelayMs = options.reconnectMaxDelayMs ?? 30000;
     }

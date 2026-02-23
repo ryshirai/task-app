@@ -10,6 +10,10 @@ pub fn is_valid_email(email: &str) -> bool {
 }
 
 pub fn is_valid_username(username: &str) -> bool {
+    let len = username.len();
+    if len < 3 || len > 30 {
+        return false;
+    }
     username
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
@@ -46,13 +50,7 @@ mod tests {
 
     #[test]
     fn accepts_ascii_alphanumeric_and_allowed_symbols() {
-        let valid_usernames = [
-            "alice",
-            "Alice123",
-            "bob_smith",
-            "charlie-01",
-            "A_B-C_123",
-        ];
+        let valid_usernames = ["alice", "Alice123", "bob_smith", "charlie-01", "A_B-C_123"];
 
         for username in valid_usernames {
             assert!(is_valid_username(username), "expected valid: {username}");
@@ -62,12 +60,7 @@ mod tests {
     #[test]
     fn rejects_disallowed_symbols() {
         let invalid_usernames = [
-            "john.doe",
-            "john doe",
-            "john@doe",
-            "john/doe",
-            "john+doe",
-            "name!",
+            "john.doe", "john doe", "john@doe", "john/doe", "john+doe", "name!",
         ];
 
         for username in invalid_usernames {
@@ -85,8 +78,12 @@ mod tests {
     }
 
     #[test]
-    fn treats_empty_string_as_valid_current_behavior() {
-        assert!(is_valid_username(""));
+    fn rejects_usernames_outside_length_bounds() {
+        assert!(!is_valid_username(""));
+        assert!(!is_valid_username("ab"));
+        assert!(is_valid_username("abc"));
+        assert!(is_valid_username("a23456789012345678901234567890"));
+        assert!(!is_valid_username("a234567890123456789012345678901"));
     }
 
     #[test]
@@ -110,7 +107,10 @@ mod tests {
         ];
 
         for password in invalid_passwords {
-            assert!(!is_secure_password(password), "expected invalid: {password}");
+            assert!(
+                !is_secure_password(password),
+                "expected invalid: {password}"
+            );
         }
     }
 }

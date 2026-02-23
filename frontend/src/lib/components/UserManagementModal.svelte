@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { createEventDispatcher, onMount } from 'svelte';
   import { auth } from '../auth';
   import type { User } from '$lib/types';
@@ -15,7 +16,7 @@
 
   async function handleIssueInvitation() {
     try {
-      const res = await fetch('http://localhost:3000/api/invitations', {
+      const res = await apiFetch('/api/invitations', {
         method: 'POST',
         headers: { 
             'Content-Type': 'application/json',
@@ -62,7 +63,7 @@
   async function handleUpdateRole(memberId: number, newRole: 'admin' | 'user') {
     try {
       updatingRoleMemberId = memberId;
-      const res = await fetch(`http://localhost:3000/api/users/${memberId}/role`, {
+      const res = await apiFetch(`/api/users/${memberId}/role`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -137,7 +138,7 @@
                  {/if}
                  <div class="flex flex-col">
                     <span class="text-sm font-bold text-text-base">{member.name}</span>
-                    <span class="font-mono text-[10px] text-text-muted">@{member.username || 'no-id'} · {member.role === 'user' ? 'member' : member.role}</span>
+                    <span class="font-mono text-[10px] text-text-muted">@{member.username || 'no-id'} · {member.role === 'admin' ? '管理者' : '一般メンバー'}</span>
                  </div>
               </div>
               <div class="flex items-center gap-2">
@@ -147,14 +148,14 @@
                     disabled={isSelfAdmin || isUpdatingRole || member.role === 'admin'}
                     class="rounded-md px-2 py-1 text-[10px] font-bold transition-colors {member.role === 'admin' ? 'bg-slate-800 text-white' : 'text-text-muted hover:bg-surface-secondary'} disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    admin
+                    管理者
                   </button>
                   <button
                     on:click={() => handleUpdateRole(member.id, 'user')}
                     disabled={isSelfAdmin || isUpdatingRole || member.role === 'user'}
                     class="rounded-md px-2 py-1 text-[10px] font-bold transition-colors {member.role === 'user' ? 'bg-slate-800 text-white' : 'text-text-muted hover:bg-surface-secondary'} disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    member
+                    メンバー
                   </button>
                 </div>
                 {#if member.role !== 'admin'}

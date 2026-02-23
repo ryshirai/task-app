@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { createEventDispatcher } from 'svelte';
   import { auth, logout } from '$lib/auth';
   import type { Task, User } from '$lib/types';
@@ -80,9 +81,10 @@
     return endAt < Date.now();
   }
 
-  function formatDateTime(value: string) {
+  function formatDateTime(value: string | null | undefined) {
+    if (!value) return '-';
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '-';
+    if (Number.isNaN(date.getTime()) || date.getTime() <= 86400000) return '-';
     return date.toLocaleString('ja-JP', {
       month: '2-digit',
       day: '2-digit',
@@ -107,7 +109,7 @@
     if (!$auth.token || task.status === status || updatingTaskIds.has(task.id)) return;
     setUpdatingTask(task.id, true);
     try {
-      const res = await fetch(`http://localhost:3000/api/tasks/${task.id}`, {
+      const res = await apiFetch(`/api/tasks/${task.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -147,11 +149,11 @@
       if (effectiveMemberId) taskParams.set('member_id', String(effectiveMemberId));
 
       const [taskRes, usersRes] = await Promise.all([
-        fetch(`http://localhost:3000/api/tasks?${taskParams.toString()}`, {
+        apiFetch(`/api/tasks?${taskParams.toString()}`, {
           headers: { Authorization: `Bearer ${$auth.token}` },
           signal: currentAbortController.signal
         }),
-        fetch(`http://localhost:3000/api/users?date=${selectedDate}`, {
+        apiFetch(`/api/users?date=${selectedDate}`, {
           headers: { Authorization: `Bearer ${$auth.token}` },
           signal: currentAbortController.signal
         })

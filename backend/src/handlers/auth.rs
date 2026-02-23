@@ -1,32 +1,148 @@
 use crate::AppState;
-use crate::models::*;
+use crate::models::{
+    Claims, D1Param, D1Row, ForgotPasswordInput, Invitation, JoinInput, LoginInput, LoginResponse,
+    ModelError, RegisterInput, ResetPasswordInput, User, VerifyEmailInput, d1_execute,
+    d1_query_one,
+};
 use crate::utils::{is_secure_password, is_valid_username};
 use argon2::{
     Argon2,
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
 };
-use axum::{Json, extract::State, http::StatusCode};
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use jsonwebtoken::{EncodingKey, Header, encode};
+use serde::Serialize;
+use serde_json::{Value, json};
+use worker::{Request, Response, Result as WorkerResult, RouteContext};
 
-/// JWT lifetime in hours.
 const JWT_EXPIRATION_HOURS: i64 = 24;
-
-/// Password-reset token lifetime in hours.
 const PASSWORD_RESET_EXPIRATION_HOURS: i64 = 1;
 
-/// Shared validation error for invalid credentials.
-const INVALID_CREDENTIALS_MESSAGE: &str = "Invalid username or password";
-
-/// Shared validation error for invalid usernames.
+const INVALID_CREDENTIALS_MESSAGE: &str = "ユーザー名またはパスワードが正しくありません";
 const INVALID_USERNAME_MESSAGE: &str =
-    "Username must contain only alphanumeric characters, underscores, or hyphens";
-const INVALID_PASSWORD_MESSAGE: &str = "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol";
+    "ユーザー名は3文字以上30文字以内で、英数字、アンダースコア、ハイフンのみ使用できます";
+const INVALID_PASSWORD_MESSAGE: &str =
+    "パスワードは8文字以上で、英大文字、小文字、数字、記号を含む必要があります";
 
-/// Builds JWT claims for a given authenticated user.
+#[derive(Serialize)]
+struct ErrorBody {
+    error: String,
+}
+
+#[derive(Debug)]
+struct ApiError {
+    status: u16,
+    message: String,
+}
+
+impl ApiError {
+    fn new(status: u16, message: impl Into<String>) -> Self {
+        Self {
+            status,
+            message: message.into(),
+        }
+    }
+
+    fn internal(message: impl Into<String>) -> Self {
+        Self::new(500, message)
+    }
+
+    fn into_response(self) -> WorkerResult<Response> {
+        Response::from_json(&ErrorBody {
+            error: self.message,
+        })
+        .map(|response| response.with_status(self.status))
+    }
+}
+
+impl From<ModelError> for ApiError {
+    fn from(value: ModelError) -> Self {
+        Self::internal(value.to_string())
+    }
+}
+
+impl From<worker::Error> for ApiError {
+    fn from(value: worker::Error) -> Self {
+        Self::internal(value.to_string())
+    }
+}
+
+#[derive(Clone, Debug)]
+struct UserPasswordRow {
+    password_hash: String,
+}
+
+impl crate::models::FromD1Row for UserPasswordRow {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        let password_hash = row
+            .get("password_hash")
+            .and_then(Value::as_str)
+            .ok_or(ModelError::MissingField("password_hash"))?
+            .to_string();
+        Ok(Self { password_hash })
+    }
+}
+
+#[derive(Clone, Debug)]
+struct IdRow {
+    id: i64,
+}
+
+impl crate::models::FromD1Row for IdRow {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        let id = row
+            .get("id")
+            .and_then(Value::as_i64)
+            .ok_or(ModelError::MissingField("id"))?;
+        Ok(Self { id })
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ResetRow {
+    id: i64,
+    user_id: i64,
+}
+
+impl crate::models::FromD1Row for ResetRow {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        let id = row
+            .get("id")
+            .and_then(Value::as_i64)
+            .ok_or(ModelError::MissingField("id"))?;
+        let user_id = row
+            .get("user_id")
+            .and_then(Value::as_i64)
+            .ok_or(ModelError::MissingField("user_id"))?;
+        Ok(Self { id, user_id })
+    }
+}
+
+#[derive(Clone, Debug)]
+struct PendingEmailRow {
+    pending_email: Option<String>,
+}
+
+impl crate::models::FromD1Row for PendingEmailRow {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        let pending_email = match row.get("pending_email") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(v)) => Some(v.clone()),
+            _ => {
+                return Err(ModelError::InvalidType {
+                    field: "pending_email",
+                    expected: "text|null",
+                });
+            }
+        };
+
+        Ok(Self { pending_email })
+    }
+}
+
 fn build_claims(user: &User) -> Claims {
     let expiration = Utc::now()
-        .checked_add_signed(chrono::Duration::hours(JWT_EXPIRATION_HOURS))
+        .checked_add_signed(Duration::hours(JWT_EXPIRATION_HOURS))
         .expect("valid timestamp")
         .timestamp() as usize;
 
@@ -39,329 +155,364 @@ fn build_claims(user: &User) -> Claims {
     }
 }
 
-/// Encodes claims into a signed JWT token.
-fn encode_token(jwt_secret: &str, claims: &Claims) -> Result<String, (StatusCode, String)> {
+fn encode_token(jwt_secret: &str, claims: &Claims) -> Result<String, ApiError> {
     encode(
         &Header::default(),
         claims,
         &EncodingKey::from_secret(jwt_secret.as_ref()),
     )
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+    .map_err(|e| ApiError::internal(e.to_string()))
 }
 
-/// Hashes a plaintext password with Argon2 using a random salt.
-fn hash_password(password: &str) -> Result<String, (StatusCode, String)> {
-    let salt = SaltString::generate(&mut OsRng);
+fn hash_password(password: &str) -> Result<String, ApiError> {
+    // Avoid `OsRng` in Workers by deriving a per-hash salt from UUID bytes.
+    let salt = SaltString::encode_b64(uuid::Uuid::new_v4().as_bytes())
+        .map_err(|e| ApiError::internal(e.to_string()))?;
+
     Argon2::default()
         .hash_password(password.as_bytes(), &salt)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+        .map_err(|e| ApiError::internal(e.to_string()))
         .map(|hash| hash.to_string())
 }
 
-/// Authenticates a user and returns a signed JWT with user profile data.
-pub async fn login(
-    State(state): State<AppState>,
-    Json(input): Json<LoginInput>,
-) -> Result<Json<LoginResponse>, (StatusCode, String)> {
-    // Step 1: Load the user by username or email.
-    let user = sqlx::query_as::<_, User>("SELECT id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified FROM users WHERE username = $1 OR email = $1")
-        .bind(&input.username)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::UNAUTHORIZED, INVALID_CREDENTIALS_MESSAGE.to_string()))?;
-
-    // Step 2: Retrieve and parse the stored password hash.
-    let stored_hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1")
-        .bind(user.id)
-        .fetch_one(&state.pool)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    let parsed_hash = PasswordHash::new(&stored_hash).map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Invalid password hash in DB".to_string(),
-        )
-    })?;
-
-    // Step 3: Verify the submitted password.
-    Argon2::default()
-        .verify_password(input.password.as_bytes(), &parsed_hash)
-        .map_err(|_| {
-            (
-                StatusCode::UNAUTHORIZED,
-                INVALID_CREDENTIALS_MESSAGE.to_string(),
-            )
-        })?;
-
-    // Step 4: Build claims and sign a JWT.
-    let claims = build_claims(&user);
-    let token = encode_token(&state.jwt_secret, &claims)?;
-
-    Ok(Json(LoginResponse { token, user }))
+fn json_with_status<T: Serialize>(value: &T, status: u16) -> Result<Response, ApiError> {
+    Response::from_json(value)
+        .map(|response| response.with_status(status))
+        .map_err(ApiError::from)
 }
 
-/// Registers a new organization and admin account, then returns an auth token.
-pub async fn register(
-    State(state): State<AppState>,
-    Json(input): Json<RegisterInput>,
-) -> Result<(StatusCode, Json<LoginResponse>), (StatusCode, String)> {
-    // Step 1: Validate username format.
-    if !is_valid_username(&input.username) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            INVALID_USERNAME_MESSAGE.to_string(),
-        ));
-    }
-    if !is_secure_password(&input.password) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            INVALID_PASSWORD_MESSAGE.to_string(),
-        ));
-    }
-
-    // Step 2: Begin transaction for organization + admin creation.
-    let mut tx = state
-        .pool
-        .begin()
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    // Step 3: Create the organization record.
-    let org =
-        sqlx::query_as::<_, (i32,)>("INSERT INTO organizations (name) VALUES ($1) RETURNING id")
-            .bind(&input.organization_name)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    // Step 4: Hash the admin password.
-    let password_hash = hash_password(&input.password)?;
-
-    // Step 5: Create the admin user in the new organization.
-    let user = sqlx::query_as::<_, User>(
-        "INSERT INTO users (organization_id, name, username, email, password_hash, role, email_verified) VALUES ($1, $2, $3, $4, $5, 'admin', TRUE) RETURNING id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified",
-    )
-    .bind(org.0)
-    .bind(&input.admin_name)
-    .bind(&input.username)
-    .bind(&input.email)
-    .bind(password_hash)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    // Step 6: Commit the transaction.
-    tx.commit()
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    // Step 7: Issue a token for the newly created admin.
-    let claims = build_claims(&user);
-    let token = encode_token(&state.jwt_secret, &claims)?;
-
-    Ok((StatusCode::CREATED, Json(LoginResponse { token, user })))
+fn db_error_to_response(err: ApiError) -> WorkerResult<Response> {
+    err.into_response()
 }
 
-/// Accepts an invitation token, creates the invited user, and returns an auth token.
-pub async fn join(
-    State(state): State<AppState>,
-    Json(input): Json<JoinInput>,
-) -> Result<(StatusCode, Json<LoginResponse>), (StatusCode, String)> {
-    // Step 1: Validate username format.
-    if !is_valid_username(&input.username) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            INVALID_USERNAME_MESSAGE.to_string(),
-        ));
-    }
-    if !is_secure_password(&input.password) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            INVALID_PASSWORD_MESSAGE.to_string(),
-        ));
-    }
-
-    // Step 2: Validate and load invitation + organization context.
-    let invitation = sqlx::query_as::<_, Invitation>(
-        "SELECT i.*, o.name as org_name FROM invitations i 
-         JOIN organizations o ON i.organization_id = o.id 
-         WHERE i.token = $1 AND i.expires_at > $2",
-    )
-    .bind(&input.token)
-    .bind(Utc::now())
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .ok_or((
-        StatusCode::NOT_FOUND,
-        "Invalid or expired invitation token".to_string(),
-    ))?;
-
-    // Step 3: Hash the incoming password.
-    let password_hash = hash_password(&input.password)?;
-
-    // Step 4: Create the invited user.
-    let user = sqlx::query_as::<_, User>(
-        "INSERT INTO users (organization_id, name, username, email, password_hash, role, email_verified) VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified",
-    )
-    .bind(invitation.organization_id)
-    .bind(input.name)
-    .bind(input.username)
-    .bind(input.email)
-    .bind(password_hash)
-    .bind(invitation.role)
-    .fetch_one(&state.pool)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    // Step 5: Best-effort invitation cleanup.
-    let _ = sqlx::query("DELETE FROM invitations WHERE id = $1")
-        .bind(invitation.id)
-        .execute(&state.pool)
-        .await;
-
-    // Step 6: Issue a token for the newly joined user.
-    let claims = build_claims(&user);
-    let token = encode_token(&state.jwt_secret, &claims)?;
-
-    Ok((StatusCode::CREATED, Json(LoginResponse { token, user })))
-}
-
-/// Creates a password-reset token for a user identified by username.
-///
-/// The token is stored in the database and delivered through the configured
-/// email provider.
-pub async fn forgot_password(
-    State(state): State<AppState>,
-    Json(input): Json<ForgotPasswordInput>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    // Step 1: Ensure the user exists.
-    let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = $1")
-        .bind(&input.username)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "User not found".to_string()))?;
-
-    // Step 2: Create a reset token and expiration timestamp.
-    let token = uuid::Uuid::new_v4().to_string();
-    let expires_at = Utc::now() + chrono::Duration::hours(PASSWORD_RESET_EXPIRATION_HOURS);
-
-    // Step 3: Persist reset token in the database.
-    sqlx::query("INSERT INTO password_resets (user_id, token, expires_at) VALUES ($1, $2, $3)")
-        .bind(user.id)
-        .bind(&token)
-        .bind(expires_at)
-        .execute(&state.pool)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    // Step 4: Send password reset email through configured provider.
-    let recipient = user
-        .email
-        .clone()
-        .or_else(|| user.username.clone())
-        .ok_or((
-            StatusCode::BAD_REQUEST,
-            "User has no email or username to send reset instructions".to_string(),
-        ))?;
-
-    state
-        .email_service
-        .send_password_reset_email(&recipient, &token)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
-
-    Ok(StatusCode::OK)
-}
-
-/// Resets a user's password using a valid reset token.
-pub async fn reset_password(
-    State(state): State<AppState>,
-    Json(input): Json<ResetPasswordInput>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    if !is_secure_password(&input.new_password) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            INVALID_PASSWORD_MESSAGE.to_string(),
-        ));
-    }
-
-    // Step 1: Validate reset token and fetch associated user.
-    let reset = sqlx::query_as::<_, (i32, i32)>(
-        "SELECT id, user_id FROM password_resets WHERE token = $1 AND expires_at > $2",
-    )
-    .bind(&input.token)
-    .bind(Utc::now())
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .ok_or((
-        StatusCode::NOT_FOUND,
-        "Invalid or expired reset token".to_string(),
-    ))?;
-
-    // Step 2: Hash the new password.
-    let password_hash = hash_password(&input.new_password)?;
-
-    // Step 3: Update the user's password hash.
-    sqlx::query("UPDATE users SET password_hash = $1 WHERE id = $2")
-        .bind(password_hash)
-        .bind(reset.1)
-        .execute(&state.pool)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    // Step 4: Best-effort cleanup of the consumed reset token.
-    let _ = sqlx::query("DELETE FROM password_resets WHERE id = $1")
-        .bind(reset.0)
-        .execute(&state.pool)
-        .await;
-
-    Ok(StatusCode::OK)
-}
-
-pub async fn verify_email(
-    State(state): State<AppState>,
-    Json(input): Json<VerifyEmailInput>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    let pending_email = sqlx::query_scalar::<_, Option<String>>(
-        "SELECT pending_email FROM users WHERE email_verification_token = $1",
-    )
-    .bind(&input.token)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .ok_or((
-        StatusCode::NOT_FOUND,
-        "Invalid or expired verification token".to_string(),
-    ))?;
-
-    let Some(_email) = pending_email else {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "No pending email to verify".to_string(),
-        ));
+pub async fn login(mut req: Request, ctx: RouteContext<AppState>) -> WorkerResult<Response> {
+    let input: LoginInput = match req.json().await {
+        Ok(v) => v,
+        Err(e) => return ApiError::new(400, e.to_string()).into_response(),
     };
 
-    let result = sqlx::query(
-        "UPDATE users
-         SET email = pending_email,
-             pending_email = NULL,
-             email_verified = TRUE,
-             email_verification_token = NULL
-         WHERE email_verification_token = $1"
-    )
-    .bind(&input.token)
-    .execute(&state.pool)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let result = async {
+        let user = d1_query_one::<User>(
+            &ctx.data.db,
+            "SELECT id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified, created_at
+             FROM users
+             WHERE username = ?1 OR email = ?1
+             LIMIT 1",
+            &[D1Param::Text(input.username.clone())],
+        )
+        .await?
+        .ok_or_else(|| ApiError::new(401, INVALID_CREDENTIALS_MESSAGE))?;
 
-    if result.rows_affected() == 0 {
-        return Err((StatusCode::NOT_FOUND, "Invalid or expired verification token".to_string()));
+        let stored_hash = d1_query_one::<UserPasswordRow>(
+            &ctx.data.db,
+            "SELECT password_hash FROM users WHERE id = ?1 LIMIT 1",
+            &[D1Param::Integer(user.id)],
+        )
+        .await?
+        .ok_or_else(|| ApiError::internal("Missing password hash"))?;
+
+        let parsed_hash = PasswordHash::new(&stored_hash.password_hash)
+            .map_err(|_| ApiError::internal("Invalid password hash in DB"))?;
+
+        Argon2::default()
+            .verify_password(input.password.as_bytes(), &parsed_hash)
+            .map_err(|_| ApiError::new(401, INVALID_CREDENTIALS_MESSAGE))?;
+
+        let claims = build_claims(&user);
+        let token = encode_token(&ctx.data.jwt_secret, &claims)?;
+
+        json_with_status(&LoginResponse { token, user }, 200)
     }
+    .await;
 
-    Ok(StatusCode::OK)
+    result.or_else(db_error_to_response)
+}
+
+pub async fn register(mut req: Request, ctx: RouteContext<AppState>) -> WorkerResult<Response> {
+    let input: RegisterInput = match req.json().await {
+        Ok(v) => v,
+        Err(e) => return ApiError::new(400, e.to_string()).into_response(),
+    };
+
+    let result = async {
+        if !is_valid_username(&input.username) {
+            return Err(ApiError::new(400, INVALID_USERNAME_MESSAGE));
+        }
+        if !is_secure_password(&input.password) {
+            return Err(ApiError::new(400, INVALID_PASSWORD_MESSAGE));
+        }
+
+        d1_execute(
+            &ctx.data.db,
+            "INSERT INTO organizations (name) VALUES (?1)",
+            &[D1Param::Text(input.organization_name.clone())],
+        )
+        .await?;
+
+        let org = d1_query_one::<IdRow>(
+            &ctx.data.db,
+            "SELECT id FROM organizations WHERE name = ?1 ORDER BY id DESC LIMIT 1",
+            &[D1Param::Text(input.organization_name.clone())],
+        )
+        .await?
+        .ok_or_else(|| ApiError::internal("Failed to load created organization"))?;
+
+        let password_hash = hash_password(&input.password)?;
+
+        d1_execute(
+            &ctx.data.db,
+            "INSERT INTO users (organization_id, name, username, email, password_hash, role, email_verified)
+             VALUES (?1, ?2, ?3, ?4, ?5, 'admin', 1)",
+            &[
+                D1Param::Integer(org.id),
+                D1Param::Text(input.admin_name.clone()),
+                D1Param::Text(input.username.clone()),
+                D1Param::Text(input.email.clone()),
+                D1Param::Text(password_hash),
+            ],
+        )
+        .await?;
+
+        let user = d1_query_one::<User>(
+            &ctx.data.db,
+            "SELECT id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified, created_at
+             FROM users
+             WHERE organization_id = ?1 AND username = ?2
+             LIMIT 1",
+            &[
+                D1Param::Integer(org.id),
+                D1Param::Text(input.username.clone()),
+            ],
+        )
+        .await?
+        .ok_or_else(|| ApiError::internal("Failed to load created user"))?;
+
+        let claims = build_claims(&user);
+        let token = encode_token(&ctx.data.jwt_secret, &claims)?;
+
+        json_with_status(&LoginResponse { token, user }, 201)
+    }
+    .await;
+
+    result.or_else(db_error_to_response)
+}
+
+pub async fn join(mut req: Request, ctx: RouteContext<AppState>) -> WorkerResult<Response> {
+    let input: JoinInput = match req.json().await {
+        Ok(v) => v,
+        Err(e) => return ApiError::new(400, e.to_string()).into_response(),
+    };
+
+    let result = async {
+        if !is_valid_username(&input.username) {
+            return Err(ApiError::new(400, INVALID_USERNAME_MESSAGE));
+        }
+        if !is_secure_password(&input.password) {
+            return Err(ApiError::new(400, INVALID_PASSWORD_MESSAGE));
+        }
+
+        let invitation = d1_query_one::<Invitation>(
+            &ctx.data.db,
+            "SELECT i.id, i.organization_id, o.name AS org_name, i.token, i.role, i.expires_at, i.created_at
+             FROM invitations i
+             JOIN organizations o ON i.organization_id = o.id
+             WHERE i.token = ?1 AND datetime(i.expires_at) > datetime('now')
+             LIMIT 1",
+            &[D1Param::Text(input.token.clone())],
+        )
+        .await?
+        .ok_or_else(|| ApiError::new(404, "Invalid or expired invitation token"))?;
+
+        let password_hash = hash_password(&input.password)?;
+
+        d1_execute(
+            &ctx.data.db,
+            "INSERT INTO users (organization_id, name, username, email, password_hash, role, email_verified)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1)",
+            &[
+                D1Param::Integer(invitation.organization_id),
+                D1Param::Text(input.name.clone()),
+                D1Param::Text(input.username.clone()),
+                D1Param::Text(input.email.clone()),
+                D1Param::Text(password_hash),
+                D1Param::Text(invitation.role.clone()),
+            ],
+        )
+        .await?;
+
+        let user = d1_query_one::<User>(
+            &ctx.data.db,
+            "SELECT id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified, created_at
+             FROM users
+             WHERE organization_id = ?1 AND username = ?2
+             LIMIT 1",
+            &[
+                D1Param::Integer(invitation.organization_id),
+                D1Param::Text(input.username.clone()),
+            ],
+        )
+        .await?
+        .ok_or_else(|| ApiError::internal("Failed to load joined user"))?;
+
+        let _ = d1_execute(
+            &ctx.data.db,
+            "DELETE FROM invitations WHERE id = ?1",
+            &[D1Param::Integer(invitation.id)],
+        )
+        .await;
+
+        let claims = build_claims(&user);
+        let token = encode_token(&ctx.data.jwt_secret, &claims)?;
+
+        json_with_status(&LoginResponse { token, user }, 201)
+    }
+    .await;
+
+    result.or_else(db_error_to_response)
+}
+
+pub async fn forgot_password(
+    mut req: Request,
+    ctx: RouteContext<AppState>,
+) -> WorkerResult<Response> {
+    let input: ForgotPasswordInput = match req.json().await {
+        Ok(v) => v,
+        Err(e) => return ApiError::new(400, e.to_string()).into_response(),
+    };
+
+    let result = async {
+        let user_opt = d1_query_one::<User>(
+            &ctx.data.db,
+            "SELECT id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified, created_at
+             FROM users
+             WHERE username = ?1 OR email = ?1
+             LIMIT 1",
+            &[D1Param::Text(input.identity.clone())],
+        )
+        .await?;
+
+        if let Some(user) = user_opt {
+            let token = uuid::Uuid::new_v4().to_string();
+            let expires_at = (Utc::now() + Duration::hours(PASSWORD_RESET_EXPIRATION_HOURS)).to_rfc3339();
+
+            d1_execute(
+                &ctx.data.db,
+                "INSERT INTO password_resets (user_id, token, expires_at) VALUES (?1, ?2, ?3)",
+                &[
+                    D1Param::Integer(user.id),
+                    D1Param::Text(token.clone()),
+                    D1Param::Text(expires_at),
+                ],
+            )
+            .await?;
+
+            let recipient = user
+                .email
+                .clone()
+                .or_else(|| user.username.clone())
+                .unwrap_or_default();
+
+            if !recipient.is_empty() {
+                let _ = ctx.data
+                    .email_service
+                    .send_password_reset_email(&recipient, &token)
+                    .await;
+            }
+        }
+
+        // Always return OK to prevent user enumeration
+        json_with_status(&json!({ "status": "ok" }), 200)
+    }
+    .await;
+
+    result.or_else(db_error_to_response)
+}
+
+pub async fn reset_password(
+    mut req: Request,
+    ctx: RouteContext<AppState>,
+) -> WorkerResult<Response> {
+    let input: ResetPasswordInput = match req.json().await {
+        Ok(v) => v,
+        Err(e) => return ApiError::new(400, e.to_string()).into_response(),
+    };
+
+    let result = async {
+        if !is_secure_password(&input.new_password) {
+            return Err(ApiError::new(400, INVALID_PASSWORD_MESSAGE));
+        }
+
+        let reset = d1_query_one::<ResetRow>(
+            &ctx.data.db,
+            "SELECT id, user_id
+             FROM password_resets
+             WHERE token = ?1 AND datetime(expires_at) > datetime('now')
+             LIMIT 1",
+            &[D1Param::Text(input.token.clone())],
+        )
+        .await?
+        .ok_or_else(|| ApiError::new(404, "Invalid or expired reset token"))?;
+
+        let password_hash = hash_password(&input.new_password)?;
+
+        d1_execute(
+            &ctx.data.db,
+            "UPDATE users SET password_hash = ?1 WHERE id = ?2",
+            &[
+                D1Param::Text(password_hash),
+                D1Param::Integer(reset.user_id),
+            ],
+        )
+        .await?;
+
+        let _ = d1_execute(
+            &ctx.data.db,
+            "DELETE FROM password_resets WHERE id = ?1",
+            &[D1Param::Integer(reset.id)],
+        )
+        .await;
+
+        json_with_status(&json!({ "status": "ok" }), 200)
+    }
+    .await;
+
+    result.or_else(db_error_to_response)
+}
+
+pub async fn verify_email(mut req: Request, ctx: RouteContext<AppState>) -> WorkerResult<Response> {
+    let input: VerifyEmailInput = match req.json().await {
+        Ok(v) => v,
+        Err(e) => return ApiError::new(400, e.to_string()).into_response(),
+    };
+
+    let result = async {
+        let pending_email = d1_query_one::<PendingEmailRow>(
+            &ctx.data.db,
+            "SELECT pending_email FROM users WHERE email_verification_token = ?1 LIMIT 1",
+            &[D1Param::Text(input.token.clone())],
+        )
+        .await?
+        .ok_or_else(|| ApiError::new(404, "Invalid or expired verification token"))?;
+
+        if pending_email.pending_email.is_none() {
+            return Err(ApiError::new(400, "No pending email to verify"));
+        }
+
+        d1_execute(
+            &ctx.data.db,
+            "UPDATE users
+             SET email = pending_email,
+                 pending_email = NULL,
+                 email_verified = 1,
+                 email_verification_token = NULL
+             WHERE email_verification_token = ?1",
+            &[D1Param::Text(input.token.clone())],
+        )
+        .await?;
+
+        json_with_status(&json!({ "status": "ok" }), 200)
+    }
+    .await;
+
+    result.or_else(db_error_to_response)
 }

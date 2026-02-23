@@ -13,22 +13,6 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: postgresql://user:password@localhost:5432/testdb
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: testdb
-          POSTGRES_USER: user
-          POSTGRES_PASSWORD: password
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U user -d testdb"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     defaults:
       run:
         working-directory: backend
@@ -39,11 +23,11 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install sqlx-cli
-        run: cargo install sqlx-cli --no-default-features --features rustls,postgres
+      - name: Install worker-build
+        run: cargo install worker-build
 
-      - name: Run DB migrations
-        run: sqlx migrate run
+      - name: Run backend check
+        run: cargo check
 
       - name: Run backend tests
         run: cargo test

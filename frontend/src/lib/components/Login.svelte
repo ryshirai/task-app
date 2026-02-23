@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
     import { auth } from '../auth';
     import { createEventDispatcher } from 'svelte';
 
@@ -10,37 +11,26 @@
     let error = '';
     let loading = false;
 
-    function translateLoginError(message: string): string {
-        const normalized = message.toLowerCase();
-        if (normalized.includes('invalid username or password')) {
-            return 'ユーザー名またはパスワードが正しくありません';
-        }
-        if (normalized.includes('invalid credentials')) {
-            return 'ログイン情報が正しくありません';
-        }
-        return message || 'ログインに失敗しました';
-    }
-
     async function handleLogin() {
         loading = true;
         error = '';
         try {
-            const res = await fetch('http://localhost:3000/api/auth/login', {
+            const res = await apiFetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password })
             });
 
             if (!res.ok) {
-                const data = await res.text();
-                throw new Error(data || 'ログインに失敗しました');
+                const data = await res.json();
+                throw new Error(data.error || 'ログインに失敗しました');
             }
 
             const data = await res.json();
             auth.set({ token: data.token, user: data.user, initialized: true });
             dispatch('loginSuccess');
         } catch (e: any) {
-            error = translateLoginError(e.message);
+            error = e.message;
         } finally {
             loading = false;
         }

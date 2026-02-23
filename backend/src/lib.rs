@@ -1,230 +1,225 @@
 pub mod email;
-mod handlers;
-mod middleware;
-mod models;
+pub mod models;
 mod utils;
 
-use axum::{
-    Router, middleware as axum_middleware,
-    routing::{get, post},
-};
-use sqlx::{Pool, Postgres};
-use std::sync::Arc;
-use tokio::sync::broadcast;
-use tower_http::cors::CorsLayer;
+#[path = "handlers/analytics.rs"]
+mod analytics;
+#[path = "handlers/auth.rs"]
+mod auth;
+#[path = "handlers/groups.rs"]
+mod groups;
+#[path = "handlers/invitations.rs"]
+mod invitations;
+#[path = "handlers/logs.rs"]
+mod logs;
+#[path = "handlers/notifications.rs"]
+mod notifications;
+#[path = "handlers/reports.rs"]
+mod reports;
+#[path = "handlers/tasks.rs"]
+mod tasks;
+#[path = "handlers/users.rs"]
+mod users;
+#[path = "handlers/ws.rs"]
+mod ws;
 
-/// Message broadcast to WebSocket subscribers.
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-pub struct WsMessage {
-    /// Tenant boundary for the event.
-    pub organization_id: i32,
-    /// Event type identifier consumed by clients.
-    pub event: String,
-    /// Event payload as arbitrary JSON.
-    pub payload: serde_json::Value,
+use serde::Serialize;
+use std::sync::Arc;
+use worker::*;
+
+fn read_optional_env(env: &Env, key: &str) -> Option<String> {
+    env.secret(key)
+        .ok()
+        .map(|v| v.to_string())
+        .or_else(|| env.var(key).ok().map(|v| v.to_string()))
 }
 
-/// Shared application state injected into handlers and middleware.
+fn cors_origin(env: &Env) -> String {
+    #[cfg(debug_assertions)]
+    {
+        let _ = env;
+        "*".to_string()
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        read_optional_env(env, "FRONTEND_URL")
+            .unwrap_or_else(|| "https://example.com".to_string())
+    }
+}
+
+fn with_cors(mut response: Response, env: &Env) -> Result<Response> {
+    let headers = response.headers_mut();
+    headers.set("Access-Control-Allow-Origin", &cors_origin(env))?;
+    headers.set(
+        "Access-Control-Allow-Methods",
+        "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    )?;
+    headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization")?;
+    headers.set("Access-Control-Max-Age", "86400")?;
+    Ok(response)
+}
+
 #[derive(Clone)]
 pub struct AppState {
-    /// PostgreSQL connection pool.
-    pub pool: Pool<Postgres>,
-    /// Secret key used to sign JWT tokens.
+    pub db: Arc<D1Database>,
     pub jwt_secret: String,
-    /// Broadcast sender for real-time events.
-    pub tx: broadcast::Sender<WsMessage>,
-    /// Email delivery service abstraction.
     pub email_service: Arc<dyn email::EmailService>,
 }
 
-/// Builds authentication-related routes.
-fn build_auth_routes() -> Router<AppState> {
-    Router::new()
-        .route("/login", post(handlers::auth::login))
-        .route("/register", post(handlers::auth::register))
-        .route("/join", post(handlers::auth::join))
-        .route("/forgot-password", post(handlers::auth::forgot_password))
-        .route("/reset-password", post(handlers::auth::reset_password))
-        .route("/verify-email", post(handlers::auth::verify_email))
+#[derive(Serialize)]
+struct HealthResponse {
+    status: &'static str,
 }
 
-/// Builds user management routes protected by authentication middleware.
-fn build_user_routes(state: &AppState) -> Router<AppState> {
-    Router::new()
-        .route("/", get(handlers::users::get_users))
-        .route(
-            "/me/password",
-            axum::routing::patch(handlers::users::update_password),
-        )
-        .route(
-            "/me/email",
-            axum::routing::patch(handlers::users::update_email),
-        )
-        .route(
-            "/",
-            post(handlers::users::create_user)
-                .layer(axum_middleware::from_fn(middleware::admin_only)),
-        )
-        .route(
-            "/{id}",
-            axum::routing::delete(handlers::users::delete_user)
-                .layer(axum_middleware::from_fn(middleware::admin_only)),
-        )
-        .route("/{id}/role", axum::routing::put(handlers::users::update_user_role))
-        .layer(axum_middleware::from_fn_with_state(
-            state.clone(),
-            middleware::auth_middleware,
-        ))
+#[derive(Serialize)]
+struct ErrorResponse {
+    error: &'static str,
 }
 
-/// Builds invitation routes.
-fn build_invitation_routes(state: &AppState) -> Router<AppState> {
-    Router::new()
-        .route(
-            "/",
-            post(handlers::invitations::create_invitation).layer(
-                axum_middleware::from_fn_with_state(state.clone(), middleware::auth_middleware),
-            ),
-        )
-        .route("/{token}", get(handlers::invitations::get_invitation))
-}
+#[event(fetch)]
+pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    console_error_panic_hook::set_once();
+    #[cfg(debug_assertions)]
+    console_log!("fetch: {} {}", req.method().to_string(), req.path());
 
-/// Builds task and task-time-log routes protected by authentication.
-fn build_task_routes(state: &AppState) -> Router<AppState> {
-    Router::new()
-        .route(
-            "/",
-            get(handlers::tasks::get_tasks).post(handlers::tasks::create_task),
-        )
-        .route("/time-logs", post(handlers::tasks::add_time_log))
-        .route(
-            "/time-logs/{id}",
-            axum::routing::patch(handlers::tasks::update_time_log)
-                .delete(handlers::tasks::delete_time_log),
-        )
-        .route(
-            "/report",
-            get(handlers::tasks::get_task_report)
-                .layer(axum_middleware::from_fn(middleware::admin_only)),
-        )
-        .route(
-            "/report/export",
-            get(handlers::tasks::export_task_report)
-                .layer(axum_middleware::from_fn(middleware::admin_only)),
-        )
-        .route(
-            "/{id}",
-            axum::routing::patch(handlers::tasks::update_task).delete(handlers::tasks::delete_task),
-        )
-        .layer(axum_middleware::from_fn_with_state(
-            state.clone(),
-            middleware::auth_middleware,
-        ))
-}
+    if req.method() == Method::Options {
+        return with_cors(Response::ok("")?, &env);
+    }
 
-/// Builds daily report CRUD routes protected by authentication.
-fn build_report_routes(state: &AppState) -> Router<AppState> {
-    Router::new()
-        .route(
-            "/",
-            get(handlers::reports::get_reports).post(handlers::reports::create_report),
-        )
-        .route(
-            "/{id}",
-            get(handlers::reports::get_report).patch(handlers::reports::update_report),
-        )
-        .layer(axum_middleware::from_fn_with_state(
-            state.clone(),
-            middleware::auth_middleware,
-        ))
-}
+    let result: Result<Response> = async {
+        let db = Arc::new(env.d1("DB")?);
+        let jwt_secret = match env.secret("JWT_SECRET") {
+            Ok(secret) => secret.to_string(),
+            Err(err) => {
+                let environment = read_optional_env(&env, "ENVIRONMENT")
+                    .or_else(|| read_optional_env(&env, "NODE_ENV"))
+                    .unwrap_or_else(|| "development".to_string());
 
-/// Builds activity log routes protected by authentication.
-fn build_log_routes(state: &AppState) -> Router<AppState> {
-    Router::new()
-        .route("/export", get(handlers::logs::export_logs))
-        .route("/", get(handlers::logs::get_logs))
-        .layer(axum_middleware::from_fn_with_state(
-            state.clone(),
-            middleware::auth_middleware,
-        ))
-}
+                if environment.eq_ignore_ascii_case("production") {
+                    console_error!("JWT_SECRET is missing in production: {}", err);
+                    return Response::error(
+                        "Server misconfiguration: JWT_SECRET is missing",
+                        500,
+                    );
+                }
 
-/// Builds notification routes protected by authentication.
-fn build_notification_routes(state: &AppState) -> Router<AppState> {
-    Router::new()
-        .route("/", get(handlers::notifications::get_notifications))
-        .route(
-            "/read-all",
-            axum::routing::patch(handlers::notifications::mark_all_as_read),
-        )
-        .route(
-            "/{id}/read",
-            axum::routing::patch(handlers::notifications::mark_as_read),
-        )
-        .layer(axum_middleware::from_fn_with_state(
-            state.clone(),
-            middleware::auth_middleware,
-        ))
-}
+                #[cfg(debug_assertions)]
+                {
+                    console_error!(
+                        "JWT_SECRET is missing (environment={}); using insecure default secret in debug build",
+                        environment
+                    );
+                    "insecure-default-secret".to_string()
+                }
 
-/// Builds analytics routes protected by authentication.
-fn build_analytics_routes(state: &AppState) -> Router<AppState> {
-    Router::new()
-        .route(
-            "/personal",
-            get(handlers::analytics::get_personal_analytics),
-        )
-        .route("/users/{id}", get(handlers::analytics::get_user_analytics))
-        .layer(axum_middleware::from_fn_with_state(
-            state.clone(),
-            middleware::auth_middleware,
-        ))
-}
+                #[cfg(not(debug_assertions))]
+                console_log!(
+                    "JWT_SECRET is missing (environment={}); refusing startup in non-debug build",
+                    environment
+                );
+                #[cfg(not(debug_assertions))]
+                return Response::error(
+                    "Server misconfiguration: JWT_SECRET is missing",
+                    500,
+                );
+            }
+        };
+        let frontend_url = read_optional_env(&env, "FRONTEND_URL")
+            .unwrap_or_else(|| "https://example.com".to_string());
+        let from_email = read_optional_env(&env, "EMAIL_FROM_ADDRESS")
+            .unwrap_or_else(|| "no-reply@example.com".to_string());
+        let resend_api_key = read_optional_env(&env, "RESEND_API_KEY");
 
-/// Builds display-group routes protected by authentication.
-fn build_display_group_routes(state: &AppState) -> Router<AppState> {
-    Router::new()
-        .route(
-            "/",
-            get(handlers::groups::get_display_groups).post(handlers::groups::create_display_group),
-        )
-        .route(
-            "/{id}",
-            axum::routing::patch(handlers::groups::update_display_group)
-                .delete(handlers::groups::delete_display_group),
-        )
-        .layer(axum_middleware::from_fn_with_state(
-            state.clone(),
-            middleware::auth_middleware,
-        ))
-}
+        let email_service: Arc<dyn email::EmailService> = if let Some(api_key) = resend_api_key {
+            #[cfg(debug_assertions)]
+            console_log!("email provider: resend");
+            Arc::new(email::ResendEmailProvider::new(
+                frontend_url,
+                from_email,
+                api_key,
+            ))
+        } else {
+            #[cfg(debug_assertions)]
+            console_log!("email provider: stdout");
+            Arc::new(email::StdoutEmailProvider::new(frontend_url))
+        };
 
-/// Builds the API subtree under `/api`.
-fn build_api_routes(state: &AppState) -> Router<AppState> {
-    Router::new()
-        .nest("/auth", build_auth_routes())
-        .nest("/users", build_user_routes(state))
-        .nest("/invitations", build_invitation_routes(state))
-        .nest("/tasks", build_task_routes(state))
-        .nest("/reports", build_report_routes(state))
-        .nest("/logs", build_log_routes(state))
-        .nest("/notifications", build_notification_routes(state))
-        .nest("/analytics", build_analytics_routes(state))
-        .nest("/display-groups", build_display_group_routes(state))
-}
+        let state = AppState {
+            db,
+            jwt_secret,
+            email_service,
+        };
 
-/// Builds the top-level Axum application router.
-pub fn build_app(state: AppState) -> Router {
-    Router::new()
-        .route(
-            "/ws",
-            get(handlers::ws::ws_handler).layer(axum_middleware::from_fn_with_state(
-                state.clone(),
-                middleware::auth_middleware,
-            )),
-        )
-        .nest("/api", build_api_routes(&state))
-        .layer(CorsLayer::permissive())
-        .with_state(state)
+        Router::with_data(state)
+            .get_async("/", |_req, _ctx| async move {
+                Response::ok("GlanceFlow API is running")
+            })
+            .get_async("/ping", |_req, _ctx| async move { Response::ok("Pong") })
+            .get_async("/health", |_req, _ctx| async move {
+                Response::from_json(&HealthResponse { status: "ok" })
+            })
+            .post_async("/api/auth/login", auth::login)
+            .post_async("/api/auth/register", auth::register)
+            .post_async("/api/auth/join", auth::join)
+            .post_async("/api/auth/forgot-password", auth::forgot_password)
+            .post_async("/api/auth/reset-password", auth::reset_password)
+            .post_async("/api/auth/verify-email", auth::verify_email)
+            .post_async("/api/invitations", invitations::create_invitation)
+            .get_async("/api/invitations/:token", invitations::get_invitation)
+            .get_async("/api/tasks", tasks::get_tasks)
+            .post_async("/api/tasks", tasks::create_task)
+            .post_async("/api/tasks/time-logs", tasks::add_time_log)
+            .patch_async("/api/tasks/time-logs/:id", tasks::update_time_log)
+            .delete_async("/api/tasks/time-logs/:id", tasks::delete_time_log)
+            .get_async("/api/tasks/report", tasks::get_task_report)
+            .get_async("/api/tasks/report/export", tasks::export_task_report)
+            .patch_async("/api/tasks/:id", tasks::update_task)
+            .delete_async("/api/tasks/:id", tasks::delete_task)
+            .get_async("/api/reports", reports::get_reports)
+            .post_async("/api/reports", reports::create_report)
+            .get_async("/api/reports/:id", reports::get_report)
+            .patch_async("/api/reports/:id", reports::update_report)
+            .get_async("/api/logs", logs::get_logs)
+            .get_async("/api/logs/export", logs::export_logs)
+            .get_async("/api/notifications", notifications::get_notifications)
+            .patch_async(
+                "/api/notifications/read-all",
+                notifications::mark_all_as_read,
+            )
+            .patch_async("/api/notifications/:id/read", notifications::mark_as_read)
+            .get_async("/api/analytics/personal", analytics::get_personal_analytics)
+            .get_async("/api/analytics/users/:id", analytics::get_user_analytics)
+            .get_async("/api/users", users::get_users)
+            .post_async("/api/users", users::create_user)
+            .patch_async("/api/users/me/password", users::update_password)
+            .patch_async("/api/users/me/email", users::update_email)
+            .put_async("/api/users/:id/role", users::update_user_role)
+            .delete_async("/api/users/:id", users::delete_user)
+            .get_async("/api/display-groups", groups::get_display_groups)
+            .post_async("/api/display-groups", groups::create_display_group)
+            .patch_async("/api/display-groups/:id", groups::update_display_group)
+            .delete_async("/api/display-groups/:id", groups::delete_display_group)
+            .get_async("/ws", ws::ws_handler)
+            .run(req, env.clone())
+            .await
+    }
+    .await;
+
+    match result {
+        Ok(response) => with_cors(response, &env),
+        Err(err) => {
+            console_error!("request failed: {:?}", err);
+            let response = Response::error("Internal Server Error", 500).or_else(
+                |response_err| {
+                    console_error!("failed to build error response: {:?}", response_err);
+                    Response::from_json(&ErrorResponse {
+                        error: "Internal Server Error",
+                    })
+                    .map(|response| response.with_status(500))
+                },
+            )?;
+            with_cors(response, &env)
+        }
+    }
 }

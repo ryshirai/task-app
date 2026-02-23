@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { onMount } from 'svelte';
   import { auth } from '$lib/auth';
   import type { DailyReport, User } from '$lib/types';
@@ -14,7 +15,7 @@
 
   async function fetchUsers() {
     try {
-      const res = await fetch('http://localhost:3000/api/users', {
+      const res = await apiFetch('/api/users', {
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
       if (res.ok) users = await res.json();
@@ -26,11 +27,11 @@
   async function fetchReports() {
     loading = true;
     try {
-      let url = 'http://localhost:3000/api/reports?';
+      let url = '/api/reports?';
       if (filterDate) url += `date=${filterDate}&`;
       if (filterUserId) url += `user_id=${filterUserId}&`;
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch reports');

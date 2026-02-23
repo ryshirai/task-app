@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import TimelineContainer from '$lib/components/TimelineContainer.svelte';
   import TaskForm from '$lib/components/TaskForm.svelte';
   import TaskEditModal from '$lib/components/TaskEditModal.svelte';
@@ -29,6 +30,12 @@
   let pollInterval: ReturnType<typeof setInterval> | null = null;
   let filterText = '';
   let selectedDate = (browser ? localStorage.getItem('glanceflow_selected_date') : null) || getTodayJSTString();
+
+  // Safety: If the date is from 2025, force reset to today (2026)
+  if (browser && selectedDate.startsWith('2025')) {
+    selectedDate = getTodayJSTString();
+    localStorage.setItem('glanceflow_selected_date', selectedDate);
+  }
   let observedTaskIdParam: string | null = null;
   let deepLinkHandled = false;
   let notifications: AppNotification[] = [];
@@ -80,7 +87,7 @@
     if (!$auth.token || editingTask || showUserManagement || showProfile || showDisplayGroupSettings) return;
 
     try {
-      const res = await fetch(`http://localhost:3000/api/users?date=${selectedDate}`, {
+      const res = await apiFetch(`/api/users?date=${selectedDate}`, {
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
       if (!res.ok) {
@@ -106,7 +113,7 @@
   async function fetchDisplayGroups() {
     if (!$auth.token) return;
     try {
-      const res = await fetch('http://localhost:3000/api/display-groups', {
+      const res = await apiFetch('/api/display-groups', {
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
       if (res.ok) {
@@ -123,7 +130,7 @@
     if (!silent) notificationsLoading = true;
 
     try {
-      const res = await fetch('http://localhost:3000/api/notifications?page=1&per_page=20', {
+      const res = await apiFetch('/api/notifications?page=1&per_page=20', {
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
 
@@ -151,7 +158,7 @@
   async function markNotificationAsRead(notificationId: number) {
     if (!$auth.token) return;
     try {
-      const res = await fetch(`http://localhost:3000/api/notifications/${notificationId}/read`, {
+      const res = await apiFetch(`/api/notifications/${notificationId}/read`, {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
@@ -171,7 +178,7 @@
   async function markAllNotificationsAsRead() {
     if (!$auth.token) return;
     try {
-      const res = await fetch('http://localhost:3000/api/notifications/read-all', {
+      const res = await apiFetch('/api/notifications/read-all', {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
@@ -301,9 +308,9 @@
     taskFormSelection = event.detail;
   }
 
-  async function handleTaskFormSubmit(event: CustomEvent<{ title: string; description?: string | null; tags: string[]; task_id?: number; start: Date; end: Date }>) {
+  async function handleTaskFormSubmit(event: CustomEvent<{ title: string; description?: string | null; tags: string[]; status: string; task_id?: number; start: Date; end: Date }>) {
     if (!taskFormSelection) return;
-    const { title, description, tags, task_id, start, end } = event.detail;
+    const { title, description, tags, status, task_id, start, end } = event.detail;
 
     const newTaskData = {
       user_id: taskFormSelection.member_id,
@@ -311,12 +318,13 @@
       title: task_id ? null : title,
       description: task_id ? null : (description || null),
       tags: task_id ? null : tags,
+      status: task_id ? null : status,
       start_at: toLocalISOString(start),
       end_at: toLocalISOString(end)
     };
 
     try {
-      const res = await fetch('http://localhost:3000/api/tasks/time-logs', {
+      const res = await apiFetch('/api/tasks/time-logs', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -342,7 +350,7 @@
   async function handleUpdateTask(event: CustomEvent<TaskTimeLog>) {
     const updatedTask = event.detail;
     try {
-      const res = await fetch(`http://localhost:3000/api/tasks/time-logs/${updatedTask.id}`, {
+      const res = await apiFetch(`/api/tasks/time-logs/${updatedTask.id}`, {
         method: 'PATCH',
         headers: { 
             'Content-Type': 'application/json',
@@ -358,29 +366,36 @@
       
       const savedTask: TaskTimeLog = await res.json();
 
-      const shouldUpdateDescription =
-        !!editingTask &&
-        updatedTask.id === editingTask.id &&
-        updatedTask.task_description !== editingTask.task_description;
-
-      if (shouldUpdateDescription) {
-        const taskUpdateRes = await fetch(`http://localhost:3000/api/tasks/${updatedTask.task_id}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${$auth.token}`
-          },
-          body: JSON.stringify({
-            description: updatedTask.task_description
-          })
-        });
-
-        if (!taskUpdateRes.ok) throw new Error('Failed to update task description');
-        const savedTaskMeta: Task = await taskUpdateRes.json();
-        savedTask.task_description = savedTaskMeta.description ?? null;
-      }
-
-      if (getJSTDateString(new Date(savedTask.start_at)) === selectedDate) {
+          const shouldUpdateMeta =
+            !!editingTask &&
+            updatedTask.id === editingTask.id &&
+            (
+              updatedTask.task_description !== editingTask.task_description ||
+              updatedTask.task_status !== editingTask.task_status ||
+              updatedTask.task_progress_rate !== editingTask.task_progress_rate
+            );
+      
+          if (shouldUpdateMeta) {
+            const taskUpdateRes = await apiFetch(`/api/tasks/${updatedTask.task_id}`, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${$auth.token}`
+              },
+              body: JSON.stringify({
+                description: updatedTask.task_description,
+                status: updatedTask.task_status,
+                progress_rate: updatedTask.task_progress_rate
+              })
+            });
+      
+            if (!taskUpdateRes.ok) throw new Error('Failed to update task description');
+            const savedTaskMeta: Task = await taskUpdateRes.json();
+            savedTask.task_description = savedTaskMeta.description ?? null;
+            savedTask.task_status = savedTaskMeta.status;
+            savedTask.task_progress_rate = savedTaskMeta.progress_rate;
+          }
+            if (getJSTDateString(new Date(savedTask.start_at)) === selectedDate) {
         users = upsertTimeLog(users, savedTask);
       } else {
         removeTimeLogById(savedTask.id);
@@ -395,7 +410,7 @@
   async function handleDeleteTask(event: CustomEvent<number>) {
     const taskId = event.detail;
     try {
-      const res = await fetch(`http://localhost:3000/api/tasks/time-logs/${taskId}`, {
+      const res = await apiFetch(`/api/tasks/time-logs/${taskId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });
@@ -413,7 +428,7 @@
   async function handleAddMember(event: CustomEvent<{ name: string; username: string; password: string }>) {
     const { name, username, password } = event.detail;
     try {
-      const res = await fetch('http://localhost:3000/api/users', {
+      const res = await apiFetch('/api/users', {
         method: 'POST',
         headers: { 
             'Content-Type': 'application/json',
@@ -433,7 +448,7 @@
   async function handleDeleteMember(event: CustomEvent<number>) {
     const memberId = event.detail;
     try {
-      const res = await fetch(`http://localhost:3000/api/users/${memberId}`, {
+      const res = await apiFetch(`/api/users/${memberId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${$auth.token}` }
       });

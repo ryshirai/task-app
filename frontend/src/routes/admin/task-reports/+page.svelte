@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { auth } from '$lib/auth';
@@ -19,6 +20,7 @@
   let filterMemberId = '';
   let filterStartDate = '';
   let filterEndDate = '';
+  let filterQ = '';
   let selectedStatuses: string[] = ['doing', 'done'];
 
   function buildQueryParams(): URLSearchParams {
@@ -26,12 +28,13 @@
     if (filterMemberId) params.set('member_id', filterMemberId);
     if (filterStartDate) params.set('start_date', filterStartDate);
     if (filterEndDate) params.set('end_date', filterEndDate);
+    if (filterQ) params.set('q', filterQ);
     params.set('statuses', selectedStatuses.join(','));
     return params;
   }
 
   async function fetchUsers() {
-    const res = await fetch('http://localhost:3000/api/users', {
+    const res = await apiFetch('/api/users', {
       headers: { Authorization: `Bearer ${$auth.token}` }
     });
     if (!res.ok) throw new Error(`メンバー取得に失敗しました (${res.status})`);
@@ -43,7 +46,7 @@
     errorMessage = '';
     try {
       const params = buildQueryParams();
-      const res = await fetch(`http://localhost:3000/api/tasks/report?${params.toString()}`, {
+      const res = await apiFetch(`/api/tasks/report?${params.toString()}`, {
         headers: { Authorization: `Bearer ${$auth.token}` }
       });
       if (!res.ok) {
@@ -75,8 +78,18 @@
     return status;
   }
 
-  function formatDateTime(iso: string): string {
-    return new Date(iso).toLocaleString('ja-JP');
+  function formatDateTime(iso: string | null | undefined): string {
+    if (!iso) return '-';
+    const date = new Date(iso);
+    // If date is invalid or near Unix epoch (1970), show hyphen
+    if (Number.isNaN(date.getTime()) || date.getTime() <= 86400000) return '-';
+    return date.toLocaleString('ja-JP', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   }
 
   function toHours(totalDurationMinutes: number): string {
@@ -94,7 +107,7 @@
 
     try {
       const params = buildQueryParams();
-      const res = await fetch(`http://localhost:3000/api/tasks/report/export?${params.toString()}`, {
+      const res = await apiFetch(`/api/tasks/report/export?${params.toString()}`, {
         headers: { Authorization: `Bearer ${$auth.token}` }
       });
 
@@ -161,6 +174,11 @@
       <div class="mb-4 border-b border-border-base pb-4">
         <h2 class="text-xs font-bold text-text-base mb-3">絞り込み</h2>
         <div class="flex flex-wrap items-end gap-3">
+          <div class="min-w-[180px]">
+            <label for="search-q" class="mb-1 block text-[10px] font-bold text-text-muted">検索</label>
+            <input id="search-q" type="text" bind:value={filterQ} placeholder="タスク名、ユーザー、タグ..." class="form-control rounded px-2 py-1.5 text-xs w-full" />
+          </div>
+
           <div class="min-w-[180px]">
             <label for="member-id" class="mb-1 block text-[10px] font-bold text-text-muted">メンバー</label>
             <select id="member-id" bind:value={filterMemberId} class="form-control rounded px-2 py-1.5 text-xs">
@@ -237,7 +255,7 @@
                 <th class="px-3 py-2 text-left font-bold text-text-muted">タグ</th>
                 <th class="px-3 py-2 text-left font-bold text-text-muted">開始</th>
                 <th class="px-3 py-2 text-left font-bold text-text-muted">終了</th>
-                <th class="px-3 py-2 text-left font-bold text-text-muted">Total Hours</th>
+                <th class="px-3 py-2 text-left font-bold text-text-muted">合計時間</th>
               </tr>
             </thead>
             <tbody>

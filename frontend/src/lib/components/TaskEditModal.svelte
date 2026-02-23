@@ -1,9 +1,11 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
   import { type TaskTimeLog } from '$lib/types';
-  import { toLocalISOString, formatTime } from '$lib/utils';
+  import { toLocalISOString, formatTime, parseTimeJST } from '$lib/utils';
 
   export let timeLog: TaskTimeLog;
+  let task_status = timeLog.task_status || 'todo';
+  let task_progress_rate = timeLog.task_progress_rate ?? 0;
 
   const dispatch = createEventDispatcher();
   
@@ -11,20 +13,10 @@
   let end_time = formatTime(new Date(timeLog.end_at));
   let task_description = timeLog.task_description || '';
 
-  // Simple time input parsing (HH:MM -> Date)
-  function parseTime(timeStr: string, baseDate: Date): Date {
-    const [h, m] = timeStr.split(':').map(Number);
-    // baseDate is 00:00 JST. 
-    // We add h hours and m minutes to its absolute time.
-    const d = new Date(baseDate.getTime());
-    d.setUTCMinutes(d.getUTCMinutes() + (h * 60 + m));
-    return d;
-  }
-
   async function handleSave() {
-    const baseDate = new Date(timeLog.start_at); // Keep original date, just update time
-    const newStart = parseTime(start_time, baseDate);
-    const newEnd = parseTime(end_time, baseDate);
+    const logDate = new Date(timeLog.start_at);
+    const newStart = parseTimeJST(start_time, logDate);
+    const newEnd = parseTimeJST(end_time, logDate);
 
     // Ensure end > start
     if (newEnd <= newStart) {
@@ -36,7 +28,9 @@
       ...timeLog,
       start_at: toLocalISOString(newStart),
       end_at: toLocalISOString(newEnd),
-      task_description: task_description.trim() || null
+      task_description: task_description.trim() || null,
+      task_status,
+      task_progress_rate
     };
     
     dispatch('save', updatedTask);
@@ -98,6 +92,35 @@
             class="form-control px-3 py-2.5 text-sm font-semibold transition-all focus:ring-2"
           />
         </div>
+      </div>
+
+      <div>
+        <label for="task-edit-status" class="mb-1 block text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">ステータス</label>
+        <select
+          id="task-edit-status"
+          bind:value={task_status}
+          class="form-control w-full px-3 py-2.5 text-sm font-semibold transition-all focus:ring-2"
+        >
+          <option value="todo">未着手</option>
+          <option value="doing">進行中</option>
+          <option value="done">完了</option>
+        </select>
+      </div>
+
+      <div>
+        <div class="mb-1 flex items-center justify-between">
+          <label for="task-edit-progress" class="block text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">進捗率</label>
+          <span class="text-[11px] font-black text-blue-600">{task_progress_rate}%</span>
+        </div>
+        <input 
+          id="task-edit-progress"
+          type="range"
+          min="0"
+          max="100"
+          step="5"
+          bind:value={task_progress_rate}
+          class="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-[var(--border-base)] accent-blue-600"
+        />
       </div>
 
       <div>

@@ -32,3 +32,5 @@ Thumbs.db
 
 # obsidian
 obsidian-vault
+.dev.vars
+.wrangler

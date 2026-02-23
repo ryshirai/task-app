@@ -41,6 +41,12 @@ export function getTodayJSTString(): string {
     return getJSTDateString(new Date());
 }
 
+/** Returns YYYYMMDD as a number for JST timezone. */
+export function getJSTDateValue(date: Date): number {
+    const s = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(date); // YYYY-MM-DD
+    return Number(s.replace(/-/g, ''));
+}
+
 export function isSameJSTDate(d1: Date, d2: Date): boolean {
     return getJSTDateString(d1) === getJSTDateString(d2);
 }
@@ -106,4 +112,15 @@ export function toLocalISOString(date: Date): string {
     // Returns ISO string with JST offset (+09:00)
     const jstDate = new Date(date.getTime() + JST_OFFSET_MS);
     return jstDate.toISOString().replace('Z', '+09:00');
+}
+
+export function parseTimeJST(timeStr: string, baseDate: Date): Date {
+    const [h, m] = timeStr.split(':').map(Number);
+    const year = baseDate.getFullYear();
+    const month = String(baseDate.getMonth() + 1).padStart(2, '0');
+    const day = String(baseDate.getDate()).padStart(2, '0');
+    const hh = String(h).padStart(2, '0');
+    const mm = String(m).padStart(2, '0');
+    // ISO string with JST offset
+    return new Date(`${year}-${month}-${day}T${hh}:${mm}:00+09:00`);
 }

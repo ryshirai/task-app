@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { createEventDispatcher, onMount } from 'svelte';
   import { auth } from '$lib/auth';
 
@@ -35,7 +36,7 @@
     success = false;
 
     try {
-      const res = await fetch('http://localhost:3000/api/users/me/password', {
+      const res = await apiFetch('/api/users/me/password', {
         method: 'PATCH',
         headers: { 
             'Content-Type': 'application/json',
