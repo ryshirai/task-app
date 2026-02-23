@@ -1,5 +1,6 @@
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import type { Writable } from 'svelte/store';
+import { apiFetch } from './api';
 import type { AuthState, User } from './types';
 
 const isBrowser = typeof window !== 'undefined';
@@ -58,4 +59,29 @@ if (isBrowser) {
  */
 export function logout() {
   auth.update((state) => ({ ...state, token: null, user: null }));
+}
+
+/**
+ * Requests a new email verification message for the authenticated user.
+ */
+export async function resendVerification(): Promise<Response> {
+  const { token } = get(auth);
+
+  return apiFetch('/api/auth/resend-verification', {
+    method: 'POST',
+    token
+  });
+}
+
+/**
+ * Requests an email address change for the authenticated user.
+ */
+export async function updateEmail(email: string): Promise<Response> {
+  const { token } = get(auth);
+
+  return apiFetch('/api/users/me/email', {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ email })
+  });
 }

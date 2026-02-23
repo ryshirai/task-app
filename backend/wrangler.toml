@@ -1,0 +1,37 @@
+name = "app-worker"
+main = "build/worker/shim.mjs"
+compatibility_date = "2026-02-23"
+workers_dev = false
+preview_urls = false
+
+[[routes]]
+pattern = "gf-api.rysh.dev"
+zone_name = "rysh.dev"
+custom_domain = true
+
+[build]
+command = "worker-build --release"
+
+[vars]
+APP_ENV = "production"
+EMAIL_FROM_ADDRESS = "no-reply@gf.rysh.dev"
+FRONTEND_URL = "https://gf.rysh.dev"
+
+[[d1_databases]]
+binding = "DB"
+database_id = "4f310aad-b888-4ba0-84c2-22a6b8ca222f"
+
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1

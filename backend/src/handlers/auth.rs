@@ -10,7 +10,7 @@ use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
 };
 use chrono::{Duration, Utc};
-use jsonwebtoken::{EncodingKey, Header, encode};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::Serialize;
 use serde_json::{Value, json};
 use worker::{Request, Response, Result as WorkerResult, RouteContext};
@@ -99,6 +99,22 @@ impl crate::models::FromD1Row for IdRow {
 }
 
 #[derive(Clone, Debug)]
+struct RoleRow {
+    role: String,
+}
+
+impl crate::models::FromD1Row for RoleRow {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        let role = row
+            .get("role")
+            .and_then(Value::as_str)
+            .ok_or(ModelError::MissingField("role"))?
+            .to_string();
+        Ok(Self { role })
+    }
+}
+
+#[derive(Clone, Debug)]
 struct ResetRow {
     id: i64,
     user_id: i64,
@@ -119,12 +135,25 @@ impl crate::models::FromD1Row for ResetRow {
 }
 
 #[derive(Clone, Debug)]
-struct PendingEmailRow {
+struct VerificationTargetRow {
+    email: Option<String>,
     pending_email: Option<String>,
+    email_verified: i64,
 }
 
-impl crate::models::FromD1Row for PendingEmailRow {
+impl crate::models::FromD1Row for VerificationTargetRow {
     fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        let email = match row.get("email") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(v)) => Some(v.clone()),
+            _ => {
+                return Err(ModelError::InvalidType {
+                    field: "email",
+                    expected: "text|null",
+                });
+            }
+        };
+
         let pending_email = match row.get("pending_email") {
             None | Some(Value::Null) => None,
             Some(Value::String(v)) => Some(v.clone()),
@@ -136,7 +165,53 @@ impl crate::models::FromD1Row for PendingEmailRow {
             }
         };
 
-        Ok(Self { pending_email })
+        let email_verified = row
+            .get("email_verified")
+            .and_then(Value::as_i64)
+            .ok_or(ModelError::MissingField("email_verified"))?;
+
+        Ok(Self {
+            email,
+            pending_email,
+            email_verified,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+struct VerifyEmailRow {
+    email: Option<String>,
+    pending_email: Option<String>,
+}
+
+impl crate::models::FromD1Row for VerifyEmailRow {
+    fn from_d1_row(row: &D1Row) -> Result<Self, ModelError> {
+        let email = match row.get("email") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(v)) => Some(v.clone()),
+            _ => {
+                return Err(ModelError::InvalidType {
+                    field: "email",
+                    expected: "text|null",
+                });
+            }
+        };
+
+        let pending_email = match row.get("pending_email") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(v)) => Some(v.clone()),
+            _ => {
+                return Err(ModelError::InvalidType {
+                    field: "pending_email",
+                    expected: "text|null",
+                });
+            }
+        };
+
+        Ok(Self {
+            email,
+            pending_email,
+        })
     }
 }
 
@@ -183,6 +258,55 @@ fn json_with_status<T: Serialize>(value: &T, status: u16) -> Result<Response, Ap
 
 fn db_error_to_response(err: ApiError) -> WorkerResult<Response> {
     err.into_response()
+}
+
+fn extract_bearer_token(req: &Request) -> Option<String> {
+    let header_token = req
+        .headers()
+        .get("Authorization")
+        .ok()
+        .flatten()
+        .and_then(|v| v.strip_prefix("Bearer ").map(|s| s.to_string()));
+
+    if header_token.is_some() {
+        return header_token;
+    }
+
+    req.url().ok().and_then(|url| {
+        url.query().and_then(|query| {
+            query
+                .split('&')
+                .filter_map(|pair| pair.split_once('='))
+                .find_map(|(k, v)| (k == "token" && !v.is_empty()).then_some(v.to_string()))
+        })
+    })
+}
+
+async fn extract_claims(req: &Request, ctx: &RouteContext<AppState>) -> Result<Claims, ApiError> {
+    let token = extract_bearer_token(req)
+        .ok_or_else(|| ApiError::new(401, "Missing authorization token"))?;
+
+    let token_data = decode::<Claims>(
+        &token,
+        &DecodingKey::from_secret(ctx.data.jwt_secret.as_ref()),
+        &Validation::new(Algorithm::HS256),
+    )
+    .map_err(|_| ApiError::new(401, "Invalid token"))?;
+
+    let mut claims = token_data.claims;
+    let latest_role = d1_query_one::<RoleRow>(
+        &ctx.data.db,
+        "SELECT role FROM users WHERE id = ?1 AND organization_id = ?2 LIMIT 1",
+        &[
+            D1Param::Integer(claims.user_id),
+            D1Param::Integer(claims.organization_id),
+        ],
+    )
+    .await?
+    .ok_or_else(|| ApiError::new(401, "Unauthorized"))?;
+
+    claims.role = latest_role.role;
+    Ok(claims)
 }
 
 pub async fn login(mut req: Request, ctx: RouteContext<AppState>) -> WorkerResult<Response> {
@@ -258,20 +382,28 @@ pub async fn register(mut req: Request, ctx: RouteContext<AppState>) -> WorkerRe
         .ok_or_else(|| ApiError::internal("Failed to load created organization"))?;
 
         let password_hash = hash_password(&input.password)?;
+        let email_verification_token = uuid::Uuid::new_v4().to_string();
 
         d1_execute(
             &ctx.data.db,
-            "INSERT INTO users (organization_id, name, username, email, password_hash, role, email_verified)
-             VALUES (?1, ?2, ?3, ?4, ?5, 'admin', 1)",
+            "INSERT INTO users (organization_id, name, username, email, pending_email, password_hash, role, email_verified, email_verification_token)
+             VALUES (?1, ?2, ?3, NULL, ?4, ?5, 'admin', 0, ?6)",
             &[
                 D1Param::Integer(org.id),
                 D1Param::Text(input.admin_name.clone()),
                 D1Param::Text(input.username.clone()),
                 D1Param::Text(input.email.clone()),
                 D1Param::Text(password_hash),
+                D1Param::Text(email_verification_token.clone()),
             ],
         )
         .await?;
+
+        ctx.data
+            .email_service
+            .send_verification_email(&input.email, &email_verification_token)
+            .await
+            .map_err(ApiError::internal)?;
 
         let user = d1_query_one::<User>(
             &ctx.data.db,
@@ -324,11 +456,12 @@ pub async fn join(mut req: Request, ctx: RouteContext<AppState>) -> WorkerResult
         .ok_or_else(|| ApiError::new(404, "Invalid or expired invitation token"))?;
 
         let password_hash = hash_password(&input.password)?;
+        let email_verification_token = uuid::Uuid::new_v4().to_string();
 
         d1_execute(
             &ctx.data.db,
-            "INSERT INTO users (organization_id, name, username, email, password_hash, role, email_verified)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1)",
+            "INSERT INTO users (organization_id, name, username, email, pending_email, password_hash, role, email_verified, email_verification_token)
+             VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?6, 0, ?7)",
             &[
                 D1Param::Integer(invitation.organization_id),
                 D1Param::Text(input.name.clone()),
@@ -336,9 +469,16 @@ pub async fn join(mut req: Request, ctx: RouteContext<AppState>) -> WorkerResult
                 D1Param::Text(input.email.clone()),
                 D1Param::Text(password_hash),
                 D1Param::Text(invitation.role.clone()),
+                D1Param::Text(email_verification_token.clone()),
             ],
         )
         .await?;
+
+        ctx.data
+            .email_service
+            .send_verification_email(&input.email, &email_verification_token)
+            .await
+            .map_err(ApiError::internal)?;
 
         let user = d1_query_one::<User>(
             &ctx.data.db,
@@ -486,22 +626,22 @@ pub async fn verify_email(mut req: Request, ctx: RouteContext<AppState>) -> Work
     };
 
     let result = async {
-        let pending_email = d1_query_one::<PendingEmailRow>(
+        let verification_target = d1_query_one::<VerifyEmailRow>(
             &ctx.data.db,
-            "SELECT pending_email FROM users WHERE email_verification_token = ?1 LIMIT 1",
+            "SELECT email, pending_email FROM users WHERE email_verification_token = ?1 LIMIT 1",
             &[D1Param::Text(input.token.clone())],
         )
         .await?
         .ok_or_else(|| ApiError::new(404, "Invalid or expired verification token"))?;
 
-        if pending_email.pending_email.is_none() {
-            return Err(ApiError::new(400, "No pending email to verify"));
+        if verification_target.pending_email.is_none() && verification_target.email.is_none() {
+            return Err(ApiError::new(400, "No email to verify"));
         }
 
         d1_execute(
             &ctx.data.db,
             "UPDATE users
-             SET email = pending_email,
+             SET email = COALESCE(pending_email, email),
                  pending_email = NULL,
                  email_verified = 1,
                  email_verification_token = NULL
@@ -509,6 +649,65 @@ pub async fn verify_email(mut req: Request, ctx: RouteContext<AppState>) -> Work
             &[D1Param::Text(input.token.clone())],
         )
         .await?;
+
+        json_with_status(&json!({ "status": "ok" }), 200)
+    }
+    .await;
+
+    result.or_else(db_error_to_response)
+}
+
+pub async fn resend_verification(
+    req: Request,
+    ctx: RouteContext<AppState>,
+) -> WorkerResult<Response> {
+    let result = async {
+        let claims = extract_claims(&req, &ctx).await?;
+
+        let user = d1_query_one::<VerificationTargetRow>(
+            &ctx.data.db,
+            "SELECT email, pending_email, email_verified
+             FROM users
+             WHERE id = ?1 AND organization_id = ?2
+             LIMIT 1",
+            &[
+                D1Param::Integer(claims.user_id),
+                D1Param::Integer(claims.organization_id),
+            ],
+        )
+        .await?
+        .ok_or_else(|| ApiError::new(404, "User not found"))?;
+
+        if user.email_verified == 1 && user.pending_email.is_none() {
+            return Err(ApiError::new(400, "Email is already verified"));
+        }
+
+        let target_email = user
+            .pending_email
+            .clone()
+            .or(user.email.clone())
+            .ok_or_else(|| ApiError::new(400, "No email to verify"))?;
+
+        let token = uuid::Uuid::new_v4().to_string();
+
+        d1_execute(
+            &ctx.data.db,
+            "UPDATE users
+             SET email_verification_token = ?1
+             WHERE id = ?2 AND organization_id = ?3",
+            &[
+                D1Param::Text(token.clone()),
+                D1Param::Integer(claims.user_id),
+                D1Param::Integer(claims.organization_id),
+            ],
+        )
+        .await?;
+
+        ctx.data
+            .email_service
+            .send_verification_email(&target_email, &token)
+            .await
+            .map_err(ApiError::internal)?;
 
         json_with_status(&json!({ "status": "ok" }), 200)
     }

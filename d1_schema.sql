@@ -3,6 +3,7 @@ PRAGMA foreign_keys = OFF;
 DROP TABLE IF EXISTS display_group_members;
 DROP TABLE IF EXISTS display_groups;
 DROP TABLE IF EXISTS invitations;
+DROP TABLE IF EXISTS password_resets;
 DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS activity_logs;
 DROP TABLE IF EXISTS daily_reports;
@@ -41,6 +42,14 @@ CREATE TABLE users (
 
 CREATE INDEX idx_users_org_username ON users (organization_id, username);
 CREATE INDEX idx_users_email_token ON users (email_verification_token);
+
+CREATE TABLE password_resets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Tasks
 CREATE TABLE tasks (

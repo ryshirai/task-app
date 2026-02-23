@@ -25,6 +25,7 @@ function makeUser(id: number, timeLogs: TaskTimeLog[] = []): User {
     organization_id: 10,
     name: `User ${id}`,
     username: `user${id}`,
+    email_verified: 1,
     role: 'user',
     time_logs: timeLogs
   };
