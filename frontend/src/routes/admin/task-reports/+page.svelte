@@ -20,6 +20,7 @@
   let filterMemberId = '';
   let filterStartDate = '';
   let filterEndDate = '';
+  let filterQ = '';
   let selectedStatuses: string[] = ['doing', 'done'];
 
   function buildQueryParams(): URLSearchParams {
@@ -27,6 +28,7 @@
     if (filterMemberId) params.set('member_id', filterMemberId);
     if (filterStartDate) params.set('start_date', filterStartDate);
     if (filterEndDate) params.set('end_date', filterEndDate);
+    if (filterQ) params.set('q', filterQ);
     params.set('statuses', selectedStatuses.join(','));
     return params;
   }
@@ -163,6 +165,11 @@
         <h2 class="text-xs font-bold text-text-base mb-3">絞り込み</h2>
         <div class="flex flex-wrap items-end gap-3">
           <div class="min-w-[180px]">
+            <label for="search-q" class="mb-1 block text-[10px] font-bold text-text-muted">検索</label>
+            <input id="search-q" type="text" bind:value={filterQ} placeholder="タスク名、ユーザー、タグ..." class="form-control rounded px-2 py-1.5 text-xs w-full" />
+          </div>
+
+          <div class="min-w-[180px]">
             <label for="member-id" class="mb-1 block text-[10px] font-bold text-text-muted">メンバー</label>
             <select id="member-id" bind:value={filterMemberId} class="form-control rounded px-2 py-1.5 text-xs">
               <option value="">全員</option>
@@ -238,7 +245,7 @@
                 <th class="px-3 py-2 text-left font-bold text-text-muted">タグ</th>
                 <th class="px-3 py-2 text-left font-bold text-text-muted">開始</th>
                 <th class="px-3 py-2 text-left font-bold text-text-muted">終了</th>
-                <th class="px-3 py-2 text-left font-bold text-text-muted">Total Hours</th>
+                <th class="px-3 py-2 text-left font-bold text-text-muted">合計時間</th>
               </tr>
             </thead>
             <tbody>

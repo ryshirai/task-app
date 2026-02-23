@@ -34,6 +34,32 @@ fn read_optional_env(env: &Env, key: &str) -> Option<String> {
         .or_else(|| env.var(key).ok().map(|v| v.to_string()))
 }
 
+fn cors_origin(env: &Env) -> String {
+    #[cfg(debug_assertions)]
+    {
+        let _ = env;
+        "*".to_string()
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        read_optional_env(env, "FRONTEND_URL")
+            .unwrap_or_else(|| "https://example.com".to_string())
+    }
+}
+
+fn with_cors(mut response: Response, env: &Env) -> Result<Response> {
+    let headers = response.headers_mut();
+    headers.set("Access-Control-Allow-Origin", &cors_origin(env))?;
+    headers.set(
+        "Access-Control-Allow-Methods",
+        "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    )?;
+    headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization")?;
+    headers.set("Access-Control-Max-Age", "86400")?;
+    Ok(response)
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub db: Arc<D1Database>,
@@ -56,6 +82,10 @@ pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     console_error_panic_hook::set_once();
     #[cfg(debug_assertions)]
     console_log!("fetch: {} {}", req.method().to_string(), req.path());
+
+    if req.method() == Method::Options {
+        return with_cors(Response::ok("")?, &env);
+    }
 
     let result: Result<Response> = async {
         let db = Arc::new(env.d1("DB")?);
@@ -166,27 +196,30 @@ pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             .patch_async("/api/users/me/email", users::update_email)
             .put_async("/api/users/:id/role", users::update_user_role)
             .delete_async("/api/users/:id", users::delete_user)
-            .get_async("/api/groups", groups::get_display_groups)
-            .post_async("/api/groups", groups::create_display_group)
-            .patch_async("/api/groups/:id", groups::update_display_group)
-            .delete_async("/api/groups/:id", groups::delete_display_group)
+            .get_async("/api/display-groups", groups::get_display_groups)
+            .post_async("/api/display-groups", groups::create_display_group)
+            .patch_async("/api/display-groups/:id", groups::update_display_group)
+            .delete_async("/api/display-groups/:id", groups::delete_display_group)
             .get_async("/ws", ws::ws_handler)
-            .run(req, env)
+            .run(req, env.clone())
             .await
     }
     .await;
 
     match result {
-        Ok(response) => Ok(response),
+        Ok(response) => with_cors(response, &env),
         Err(err) => {
             console_error!("request failed: {:?}", err);
-            Response::error("Internal Server Error", 500).or_else(|response_err| {
-                console_error!("failed to build error response: {:?}", response_err);
-                Response::from_json(&ErrorResponse {
-                    error: "Internal Server Error",
-                })
-                .map(|response| response.with_status(500))
-            })
+            let response = Response::error("Internal Server Error", 500).or_else(
+                |response_err| {
+                    console_error!("failed to build error response: {:?}", response_err);
+                    Response::from_json(&ErrorResponse {
+                        error: "Internal Server Error",
+                    })
+                    .map(|response| response.with_status(500))
+                },
+            )?;
+            with_cors(response, &env)
         }
     }
 }

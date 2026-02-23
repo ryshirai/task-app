@@ -68,7 +68,7 @@ CREATE TABLE task_time_logs (
     start_at TEXT NOT NULL,
     end_at TEXT NOT NULL,
     duration_minutes INTEGER GENERATED ALWAYS AS (
-        CAST((julianday(end_at) - julianday(start_at)) * 1440 AS INTEGER)
+        CAST(ROUND((julianday(end_at) - julianday(start_at)) * 1440) AS INTEGER)
     ) STORED,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK (end_at > start_at),

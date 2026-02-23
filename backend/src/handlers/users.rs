@@ -59,6 +59,12 @@ impl From<worker::Error> for ApiError {
     }
 }
 
+impl From<serde_json::Error> for ApiError {
+    fn from(value: serde_json::Error) -> Self {
+        Self::internal(value.to_string())
+    }
+}
+
 #[derive(Clone, Debug)]
 struct RoleRow {
     role: String,
@@ -155,18 +161,10 @@ fn query_pairs(req: &Request) -> Result<HashMap<String, String>, ApiError> {
     let url = req
         .url()
         .map_err(|e| ApiError::new(400, format!("invalid url: {e}")))?;
+    
     let mut pairs = HashMap::new();
-    if let Some(query) = url.query() {
-        for pair in query.split('&') {
-            if pair.is_empty() {
-                continue;
-            }
-            if let Some((k, v)) = pair.split_once('=') {
-                pairs.insert(k.to_string(), v.to_string());
-            } else {
-                pairs.insert(pair.to_string(), String::new());
-            }
-        }
+    for (k, v) in url.query_pairs() {
+        pairs.insert(k.into_owned(), v.into_owned());
     }
     Ok(pairs)
 }
@@ -265,7 +263,18 @@ pub async fn get_users(req: Request, ctx: RouteContext<AppState>) -> WorkerResul
             result.push(UserWithTimeLogs { user, time_logs });
         }
 
-        json_with_status(&result, 200)
+        let mut final_result = Vec::new();
+        for entry in result {
+            let mut val = serde_json::to_value(entry.user).map_err(ApiError::from)?;
+            if let Value::Object(ref mut map) = val {
+                map.insert(
+                    "time_logs".to_string(),
+                    serde_json::to_value(entry.time_logs).map_err(ApiError::from)?,
+                );
+            }
+            final_result.push(val);
+        }
+        json_with_status(&final_result, 200)
     }
     .await;
 

@@ -107,8 +107,8 @@ pub async fn d1_query_one<T: FromD1Row>(
     sql: &str,
     params: &[D1Param],
 ) -> Result<Option<T>, ModelError> {
-    let mut rows = d1_query_all::<T>(db, sql, params).await?;
-    Ok(rows.drain(..1).next())
+    let rows = d1_query_all::<T>(db, sql, params).await?;
+    Ok(rows.into_iter().next())
 }
 
 pub async fn d1_execute(db: &D1Database, sql: &str, params: &[D1Param]) -> Result<u64, ModelError> {
@@ -473,9 +473,9 @@ impl ToD1Params for TaskTimeLog {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TaskReportRow {
+    #[serde(flatten)]
     pub task: Task,
     pub user_name: String,
-    pub total_duration_minutes: i64,
     pub start_at: Option<String>,
     pub end_at: Option<String>,
 }
@@ -792,6 +792,7 @@ pub struct AddTimeLogInput {
     pub task_id: Option<i64>,
     pub title: Option<String>,
     pub description: Option<String>,
+    pub status: Option<String>,
     pub tags: Option<Vec<String>>,
     pub start_at: String,
     pub end_at: String,
@@ -820,7 +821,7 @@ pub struct RegisterInput {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateInvitationInput {
-    pub email: String,
+    pub email: Option<String>,
     pub role: String,
 }
 
@@ -891,6 +892,7 @@ pub struct TaskReportQuery {
     pub start_date: Option<String>,
     pub end_date: Option<String>,
     pub statuses: Option<String>,
+    pub q: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

@@ -30,6 +30,12 @@
   let pollInterval: ReturnType<typeof setInterval> | null = null;
   let filterText = '';
   let selectedDate = (browser ? localStorage.getItem('glanceflow_selected_date') : null) || getTodayJSTString();
+
+  // Safety: If the date is from 2025, force reset to today (2026)
+  if (browser && selectedDate.startsWith('2025')) {
+    selectedDate = getTodayJSTString();
+    localStorage.setItem('glanceflow_selected_date', selectedDate);
+  }
   let observedTaskIdParam: string | null = null;
   let deepLinkHandled = false;
   let notifications: AppNotification[] = [];
@@ -302,9 +308,9 @@
     taskFormSelection = event.detail;
   }
 
-  async function handleTaskFormSubmit(event: CustomEvent<{ title: string; description?: string | null; tags: string[]; task_id?: number; start: Date; end: Date }>) {
+  async function handleTaskFormSubmit(event: CustomEvent<{ title: string; description?: string | null; tags: string[]; status: string; task_id?: number; start: Date; end: Date }>) {
     if (!taskFormSelection) return;
-    const { title, description, tags, task_id, start, end } = event.detail;
+    const { title, description, tags, status, task_id, start, end } = event.detail;
 
     const newTaskData = {
       user_id: taskFormSelection.member_id,
@@ -312,6 +318,7 @@
       title: task_id ? null : title,
       description: task_id ? null : (description || null),
       tags: task_id ? null : tags,
+      status: task_id ? null : status,
       start_at: toLocalISOString(start),
       end_at: toLocalISOString(end)
     };
@@ -359,29 +366,36 @@
       
       const savedTask: TaskTimeLog = await res.json();
 
-      const shouldUpdateDescription =
-        !!editingTask &&
-        updatedTask.id === editingTask.id &&
-        updatedTask.task_description !== editingTask.task_description;
-
-      if (shouldUpdateDescription) {
-        const taskUpdateRes = await apiFetch(`/api/tasks/${updatedTask.task_id}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${$auth.token}`
-          },
-          body: JSON.stringify({
-            description: updatedTask.task_description
-          })
-        });
-
-        if (!taskUpdateRes.ok) throw new Error('Failed to update task description');
-        const savedTaskMeta: Task = await taskUpdateRes.json();
-        savedTask.task_description = savedTaskMeta.description ?? null;
-      }
-
-      if (getJSTDateString(new Date(savedTask.start_at)) === selectedDate) {
+          const shouldUpdateMeta =
+            !!editingTask &&
+            updatedTask.id === editingTask.id &&
+            (
+              updatedTask.task_description !== editingTask.task_description ||
+              updatedTask.task_status !== editingTask.task_status ||
+              updatedTask.task_progress_rate !== editingTask.task_progress_rate
+            );
+      
+          if (shouldUpdateMeta) {
+            const taskUpdateRes = await apiFetch(`/api/tasks/${updatedTask.task_id}`, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${$auth.token}`
+              },
+              body: JSON.stringify({
+                description: updatedTask.task_description,
+                status: updatedTask.task_status,
+                progress_rate: updatedTask.task_progress_rate
+              })
+            });
+      
+            if (!taskUpdateRes.ok) throw new Error('Failed to update task description');
+            const savedTaskMeta: Task = await taskUpdateRes.json();
+            savedTask.task_description = savedTaskMeta.description ?? null;
+            savedTask.task_status = savedTaskMeta.status;
+            savedTask.task_progress_rate = savedTaskMeta.progress_rate;
+          }
+            if (getJSTDateString(new Date(savedTask.start_at)) === selectedDate) {
         users = upsertTimeLog(users, savedTask);
       } else {
         removeTimeLogById(savedTask.id);

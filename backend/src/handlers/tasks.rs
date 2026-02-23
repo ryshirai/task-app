@@ -4,7 +4,7 @@ use crate::models::{
     TaskReportQuery, TaskReportRow, TaskTimeLog, UpdateTaskInput, UpdateTimeLogInput, d1_execute,
     d1_query_all, d1_query_one,
 };
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, Duration, FixedOffset, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -197,18 +197,10 @@ fn query_pairs(req: &Request) -> Result<HashMap<String, String>, ApiError> {
     let url = req
         .url()
         .map_err(|e| ApiError::new(400, format!("invalid url: {e}")))?;
+    
     let mut pairs = HashMap::new();
-    if let Some(query) = url.query() {
-        for pair in query.split('&') {
-            if pair.is_empty() {
-                continue;
-            }
-            if let Some((k, v)) = pair.split_once('=') {
-                pairs.insert(k.to_string(), v.to_string());
-            } else {
-                pairs.insert(pair.to_string(), String::new());
-            }
-        }
+    for (k, v) in url.query_pairs() {
+        pairs.insert(k.into_owned(), v.into_owned());
     }
     Ok(pairs)
 }
@@ -242,6 +234,7 @@ fn parse_task_report_query(req: &Request) -> Result<TaskReportQuery, ApiError> {
         start_date: pairs.get("start_date").cloned(),
         end_date: pairs.get("end_date").cloned(),
         statuses: pairs.get("statuses").cloned(),
+        q: pairs.get("q").cloned(),
     })
 }
 
@@ -338,7 +331,7 @@ fn csv_escape(value: &str) -> String {
 
 fn task_report_to_csv(rows: &[TaskReportRow]) -> String {
     let mut csv = String::from(
-        "担当者,タスク名,ステータス,進捗率,タグ,開始日時,終了日時,Total Duration (Hours)\n",
+        "担当者,タスク名,ステータス,進捗率,タグ,開始日時,終了日時,合計時間(時間)\n",
     );
 
     for row in rows {
@@ -358,7 +351,7 @@ fn task_report_to_csv(rows: &[TaskReportRow]) -> String {
             csv_escape(&tags),
             csv_escape(row.start_at.as_deref().unwrap_or("")),
             csv_escape(row.end_at.as_deref().unwrap_or("")),
-            format!("{:.2}", row.total_duration_minutes as f64 / 60.0),
+            format!("{:.2}", row.task.total_duration_minutes as f64 / 60.0),
         ));
     }
 
@@ -593,8 +586,8 @@ pub async fn add_time_log(mut req: Request, ctx: RouteContext<AppState>) -> Work
             } else {
                 d1_execute(
                     &ctx.data.db,
-                    "INSERT INTO tasks (organization_id, member_id, title, description)
-                     VALUES (?1, ?2, ?3, ?4)",
+                    "INSERT INTO tasks (organization_id, member_id, title, description, status)
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
                     &[
                         D1Param::Integer(claims.organization_id),
                         D1Param::Integer(input.user_id),
@@ -604,6 +597,11 @@ pub async fn add_time_log(mut req: Request, ctx: RouteContext<AppState>) -> Work
                             .clone()
                             .map(D1Param::Text)
                             .unwrap_or(D1Param::Null),
+                        input
+                            .status
+                            .clone()
+                            .map(D1Param::Text)
+                            .unwrap_or_else(|| D1Param::Text("todo".to_string())),
                     ],
                 )
                 .await?;
@@ -1166,50 +1164,83 @@ async fn fetch_task_report_rows(
     organization_id: i64,
     query: &TaskReportQuery,
 ) -> Result<Vec<TaskReportRow>, ApiError> {
+    let start_date = query.start_date.clone();
+    let end_date = query.end_date.clone();
+
+    // Aggregation range
+    let (effective_start, effective_end) = if start_date.is_none() && end_date.is_none() {
+        let now = Utc::now();
+        let three_months_ago = now - Duration::days(90);
+        (
+            Some(three_months_ago.format("%Y-%m-%d").to_string()),
+            Some(now.format("%Y-%m-%d").to_string()),
+        )
+    } else {
+        (start_date, end_date)
+    };
+
     let mut sql = String::from(
         "SELECT t.id, t.organization_id, t.member_id, t.title, t.description, t.status, t.progress_rate,
-                NULLIF(GROUP_CONCAT(DISTINCT tg.name), '') AS tags,
+                (SELECT GROUP_CONCAT(tg.name) FROM task_tags tt JOIN tags tg ON tg.id = tt.tag_id WHERE tt.task_id = t.id) AS tags,
                 t.created_at, t.updated_at,
-                COALESCE(SUM(l.duration_minutes), 0) AS total_duration_minutes,
                 u.name AS user_name,
+                COALESCE(SUM(l.duration_minutes), 0) AS total_duration_minutes,
                 MIN(l.start_at) AS start_at,
                 MAX(l.end_at) AS end_at
          FROM tasks t
          JOIN users u ON t.member_id = u.id
-         LEFT JOIN task_tags tt ON t.id = tt.task_id
-         LEFT JOIN tags tg ON tt.tag_id = tg.id
-         LEFT JOIN task_time_logs l ON l.task_id = t.id AND l.organization_id = t.organization_id
-         WHERE t.organization_id = ?",
+         LEFT JOIN task_time_logs l ON l.task_id = t.id AND l.organization_id = t.organization_id"
     );
-    let mut params = vec![D1Param::Integer(organization_id)];
+
+    let mut params = Vec::new();
+
+    // 1. Logs join condition (filters what is summed)
+    if let Some(s) = &effective_start {
+        sql.push_str(" AND date(datetime(l.start_at, '+9 hours')) >= ?");
+        params.push(D1Param::Text(s.clone()));
+    }
+    if let Some(e) = &effective_end {
+        sql.push_str(" AND date(datetime(l.end_at, '+9 hours')) <= ?");
+        params.push(D1Param::Text(e.clone()));
+    }
+
+    // 2. WHERE clause starts
+    sql.push_str(" WHERE t.organization_id = ?");
+    params.push(D1Param::Integer(organization_id));
 
     if let Some(member_id) = query.member_id {
         sql.push_str(" AND t.member_id = ?");
         params.push(D1Param::Integer(member_id));
     }
 
-    if let Some(start_date) = &query.start_date {
-        sql.push_str(" AND date(datetime(l.start_at, '+9 hours')) >= ?");
-        params.push(D1Param::Text(start_date.clone()));
-    }
-
-    if let Some(end_date) = &query.end_date {
-        sql.push_str(" AND date(datetime(l.end_at, '+9 hours')) <= ?");
-        params.push(D1Param::Text(end_date.clone()));
+    if let Some(q) = query.q.as_ref().map(|v| v.trim().to_string()).filter(|v| !v.is_empty()) {
+        let pattern = format!("%{q}%");
+        sql.push_str(" AND (LOWER(t.title) LIKE LOWER(?) OR LOWER(u.name) LIKE LOWER(?) OR EXISTS (SELECT 1 FROM task_tags tt_q JOIN tags tg_q ON tg_q.id = tt_q.tag_id WHERE tt_q.task_id = t.id AND LOWER(tg_q.name) LIKE LOWER(?)))");
+        params.push(D1Param::Text(pattern.clone()));
+        params.push(D1Param::Text(pattern.clone()));
+        params.push(D1Param::Text(pattern));
     }
 
     if let Some(raw) = &query.statuses {
-        let statuses = split_csv_values(raw);
-        if !statuses.is_empty() {
-            let placeholders = vec!["?"; statuses.len()].join(", ");
-            sql.push_str(&format!(" AND t.status IN ({placeholders})"));
-            for value in statuses {
-                params.push(D1Param::Text(value));
+        let st = split_csv_values(raw);
+        if !st.is_empty() {
+            let marks = vec!["?"; st.len()].join(", ");
+            sql.push_str(&format!(" AND t.status IN ({})", marks));
+            for s in st {
+                params.push(D1Param::Text(s));
             }
         }
     }
 
-    sql.push_str(" GROUP BY t.id, u.name ORDER BY start_at ASC, t.id ASC");
+    // 3. Visibility logic (ANDed with status/member/keyword)
+    // If it's a 'done' task, only show if it has activity or was created in the period.
+    // If it's 'todo' or 'doing', always show it if it matches the other filters.
+    if let Some(s) = &effective_start {
+        sql.push_str(" AND (t.status != 'done' OR l.id IS NOT NULL OR date(datetime(t.created_at, '+9 hours')) >= ?)");
+        params.push(D1Param::Text(s.clone()));
+    }
+
+    sql.push_str(" GROUP BY t.id, u.name ORDER BY t.created_at DESC, t.id ASC");
 
     let flat_rows = d1_query_all::<ReportFlatRow>(&state.db, &sql, &params).await?;
 
@@ -1217,7 +1248,6 @@ async fn fetch_task_report_rows(
         .into_iter()
         .map(|row| TaskReportRow {
             user_name: row.user_name,
-            total_duration_minutes: row.total_duration_minutes,
             start_at: row.start_at,
             end_at: row.end_at,
             task: Task {

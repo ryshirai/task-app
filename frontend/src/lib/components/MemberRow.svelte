@@ -28,7 +28,7 @@
       <img src={member.avatar_url} alt={member.name} class="mr-2 h-6 w-6 rounded-full border border-[var(--color-border)] object-cover shadow-sm" />
     {:else}
       <div class="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface-elevated)] to-[color:color-mix(in_srgb,var(--color-surface-elevated)_62%,var(--color-border)_38%)] text-[10px] font-bold text-[var(--color-muted)] shadow-inner">
-        {member.name.charAt(0).toUpperCase()}
+        {(member.name || '?').charAt(0).toUpperCase()}
       </div>
     {/if}
     <div class="flex flex-col min-w-0 flex-1">

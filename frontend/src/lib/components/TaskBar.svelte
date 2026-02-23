@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { type TaskTimeLog, type TaskStatus } from '$lib/types';
-  import { getTaskPosition, percentageToDate, snapTo15Min, toLocalISOString } from '$lib/utils';
+  import { getTaskPosition, percentageToDate, snapTo15Min, toLocalISOString, getJSTDateValue } from '$lib/utils';
   
   /** Task log rendered on the timeline bar. */
   export let task: TaskTimeLog;
@@ -24,9 +24,16 @@
     (task as TaskTimeLog & { description?: string | null }).description ??
     null;
   $: taskDescriptionText = taskDescription?.trim() || '';
+
+  const statusMap: Record<string, string> = {
+    todo: '未着手',
+    doing: '進行中',
+    done: '完了'
+  };
+
   $: taskTooltip = taskDescriptionText
-    ? `${taskTitle} (${statusMap[taskStatus]}, ${taskProgressRate}%)\n${taskDescriptionText}`
-    : `${taskTitle} (${statusMap[taskStatus]}, ${taskProgressRate}%)`;
+    ? `${taskTitle} (${statusMap[taskStatus] || taskStatus}, ${taskProgressRate}%)\n${taskDescriptionText}`
+    : `${taskTitle} (${statusMap[taskStatus] || taskStatus}, ${taskProgressRate}%)`;
 
   let isOverdue = false;
   let interval: ReturnType<typeof setInterval>;
@@ -37,13 +44,35 @@
       isOverdue = false;
       return;
     }
+    
     const now = new Date();
     const end = new Date(task.end_at);
-    isOverdue = now > end;
+    
+    const taskVal = getJSTDateValue(new Date(task.start_at));
+    const todayVal = getJSTDateValue(now);
+
+    if (taskVal < todayVal) {
+      // It is a past day
+      isOverdue = true;
+    } else if (taskVal > todayVal) {
+      // It is a future day
+      isOverdue = false;
+    } else {
+      // It is today: only overdue if it's late in the evening (after 18:00) 
+      // AND the task's individual scheduled time has passed.
+      const currentHour = now.getHours();
+      isOverdue = currentHour >= 18 && now > end;
+    }
+  }
+
+  // Reactive update when task or status changes
+  $: {
+    if (task && taskStatus) {
+      checkOverdue();
+    }
   }
 
   onMount(() => {
-    checkOverdue();
     interval = setInterval(checkOverdue, 60000);
   });
 
@@ -64,12 +93,6 @@
     }
     return 'border-amber-300/70 bg-gradient-to-br from-amber-300 to-amber-400 text-slate-800 shadow-amber-700/25'; // todo
   })();
-
-  const statusMap = {
-    todo: '未着手',
-    doing: '進行中',
-    done: '完了'
-  };
 
   // Drag & Drop Logic
   let isDragging = false;

@@ -138,7 +138,7 @@
                  {/if}
                  <div class="flex flex-col">
                     <span class="text-sm font-bold text-text-base">{member.name}</span>
-                    <span class="font-mono text-[10px] text-text-muted">@{member.username || 'no-id'} · {member.role === 'user' ? 'member' : member.role}</span>
+                    <span class="font-mono text-[10px] text-text-muted">@{member.username || 'no-id'} · {member.role === 'admin' ? '管理者' : '一般メンバー'}</span>
                  </div>
               </div>
               <div class="flex items-center gap-2">
@@ -148,14 +148,14 @@
                     disabled={isSelfAdmin || isUpdatingRole || member.role === 'admin'}
                     class="rounded-md px-2 py-1 text-[10px] font-bold transition-colors {member.role === 'admin' ? 'bg-slate-800 text-white' : 'text-text-muted hover:bg-surface-secondary'} disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    admin
+                    管理者
                   </button>
                   <button
                     on:click={() => handleUpdateRole(member.id, 'user')}
                     disabled={isSelfAdmin || isUpdatingRole || member.role === 'user'}
                     class="rounded-md px-2 py-1 text-[10px] font-bold transition-colors {member.role === 'user' ? 'bg-slate-800 text-white' : 'text-text-muted hover:bg-surface-secondary'} disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    member
+                    メンバー
                   </button>
                 </div>
                 {#if member.role !== 'admin'}

@@ -18,6 +18,7 @@
   let title = '';
   let description = '';
   let tagsInput = '';
+  let status = 'doing'; // Default to doing for new logs
   let selectedTaskId: number | null = null;
   let activeTasks: Task[] = [];
   let loadingActiveTasks = false;
@@ -48,6 +49,7 @@
     title = task.title.toString();
     description = task.description || '';
     tagsInput = (task.tags || []).join(', ');
+    status = task.status;
     selectedTaskId = task.id;
     // Auto-focus tags after selecting a title if it's already structured
     setTimeout(() => inputElement.focus(), 0);
@@ -61,6 +63,7 @@
         title: selectedTaskId ? null : title, 
         description: selectedTaskId ? null : (description.trim() || null),
         tags: selectedTaskId ? null : tags, 
+        status: selectedTaskId ? null : status,
         task_id: selectedTaskId,
         start, 
         end 
@@ -68,6 +71,7 @@
       title = '';
       description = '';
       tagsInput = '';
+      status = 'doing';
       selectedTaskId = null;
     } else {
       dispatch('cancel');
@@ -177,6 +181,21 @@
           class="form-control px-3 py-2 text-[11px] transition-all focus:ring-2"
         />
       </div>
+
+      {#if !selectedTaskId}
+      <div>
+        <label for="task-form-status" class="mb-1.5 block text-[10px] font-bold uppercase text-[var(--text-muted)]">ステータス</label>
+        <select
+          id="task-form-status"
+          bind:value={status}
+          class="form-control px-3 py-2 text-[11px] font-bold transition-all focus:ring-2"
+        >
+          <option value="todo">未着手</option>
+          <option value="doing">進行中</option>
+          <option value="done">完了</option>
+        </select>
+      </div>
+      {/if}
 
       <div>
         <label for="task-form-description" class="mb-1.5 block text-[10px] font-bold uppercase text-[var(--text-muted)]">詳細</label>

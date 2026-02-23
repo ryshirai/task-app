@@ -172,18 +172,20 @@ pub async fn create_invitation(
         .await?
         .ok_or_else(|| ApiError::internal("Failed to resolve created invitation"))?;
 
-        ctx.data
-            .email_service
-            .send_invitation_email(
-                &input.email,
-                &invitation.token,
-                invitation
-                    .org_name
-                    .as_deref()
-                    .unwrap_or("Your Organization"),
-            )
-            .await
-            .map_err(ApiError::internal)?;
+        if let Some(email) = &input.email {
+            ctx.data
+                .email_service
+                .send_invitation_email(
+                    email,
+                    &invitation.token,
+                    invitation
+                        .org_name
+                        .as_deref()
+                        .unwrap_or("Your Organization"),
+                )
+                .await
+                .map_err(ApiError::internal)?;
+        }
 
         json_with_status(&invitation, 201)
     }
