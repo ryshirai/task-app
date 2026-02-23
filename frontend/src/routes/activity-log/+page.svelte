@@ -420,29 +420,32 @@
                       {/if}
                     </div>
                   </td>
-                  <td class="max-w-[480px] break-words whitespace-pre-wrap px-3 py-1.5 text-text-muted">
+                  <td class="max-w-[480px] break-words whitespace-pre-wrap px-3 py-2 text-text-muted">
                     {#if log.details}
                       {@const parsed = parseDetails(log.details)}
                       {#if parsed.rows.length > 0}
-                        <div class="space-y-1">
+                        <div class="space-y-2 py-0.5">
                           {#each parsed.rows as row}
-                            <div class="rounded border border-border-base bg-surface-secondary/50 px-2 py-1">
-                              <div class="mb-0.5 text-[10px] font-bold text-text-muted">{row.label}</div>
-                              {#if row.old !== undefined || row.new !== undefined}
-                                <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                                  <span class="text-[11px] text-text-muted">変更前:</span>
-                                  <span class="text-red-600">{formatDetailValue(row.old)}</span>
-                                  <span class="text-[11px] text-text-muted">変更後:</span>
-                                  <span class="text-emerald-600">{formatDetailValue(row.new)}</span>
-                                </div>
-                              {:else}
-                                <div class="text-text-base">{formatDetailValue(row.value)}</div>
-                              {/if}
+                            <div class="flex items-center gap-2.5">
+                              <span class="shrink-0 rounded-md bg-surface-secondary px-1.5 py-0.5 text-[9px] font-black text-text-muted uppercase tracking-tighter border border-border-base">
+                                {row.label}
+                              </span>
+                              <div class="flex-1 min-w-0">
+                                {#if row.old !== undefined || row.new !== undefined}
+                                  <div class="flex flex-wrap items-center gap-x-2 text-[11px]">
+                                    <span class="truncate max-w-[120px] text-text-muted/60 line-through decoration-text-muted/30">{formatDetailValue(row.old)}</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-text-muted/30"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                                    <span class="font-bold text-emerald-600 drop-shadow-sm">{formatDetailValue(row.new)}</span>
+                                  </div>
+                                {:else}
+                                  <div class="text-[11px] font-bold text-text-base/80">{formatDetailValue(row.value)}</div>
+                                {/if}
+                              </div>
                             </div>
                           {/each}
                         </div>
                       {:else if parsed.text}
-                        {parsed.text}
+                        <span class="text-[11px]">{parsed.text}</span>
                       {:else}
                         <span class="italic text-text-muted">-</span>
                       {/if}

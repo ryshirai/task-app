@@ -836,7 +836,7 @@ pub struct JoinInput {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ForgotPasswordInput {
-    pub username: String,
+    pub identity: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

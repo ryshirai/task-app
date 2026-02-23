@@ -1,6 +1,6 @@
 <script lang="ts">
   import { apiFetch } from '$lib/api';
-    let username = '';
+    let identity = '';
     let loading = false;
     let error = '';
     let success = false;
@@ -13,10 +13,13 @@
             const res = await apiFetch('/api/auth/forgot-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username })
+                body: JSON.stringify({ identity })
             });
 
-            if (!res.ok) throw new Error('ユーザーが見つかりません。');
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'リクエストの送信に失敗しました。');
+            }
             success = true;
         } catch (e: any) {
             error = e.message;
@@ -34,15 +37,14 @@
             <div class="rounded-2xl border border-emerald-300/60 bg-emerald-100/55 p-4 text-center dark:border-emerald-900 dark:bg-emerald-950/30">
                 <p class="mb-2 font-bold text-emerald-700 dark:text-emerald-200">リクエストを送信しました</p>
                 <p class="text-xs leading-relaxed text-emerald-700/85 dark:text-emerald-200/85">
-                    システムログにリセットトークンが出力されました。<br/>
-                    (デモ版のためメール送信は行われません)
+                    入力されたアカウントが存在する場合、再設定用のリンクを記載したメールを送信しました。
                 </p>
                 <a href="/" class="mt-4 block text-xs font-bold text-blue-600 hover:brightness-110">ログイン画面に戻る</a>
             </div>
         {:else}
-            <p class="mb-6 text-center text-sm text-[var(--text-muted)]">ログインに使用しているユーザー名を入力してください</p>
+            <p class="mb-6 text-center text-sm text-[var(--text-muted)]">ログインに使用しているユーザー名またはメールアドレスを入力してください</p>
             <form on:submit|preventDefault={handleSubmit} class="space-y-4">
-                <input bind:value={username} required class="form-control px-4 py-2.5 text-sm focus:ring-2 transition-all" placeholder="ユーザー名" />
+                <input bind:value={identity} required class="form-control px-4 py-2.5 text-sm focus:ring-2 transition-all" placeholder="ユーザー名またはメールアドレス" />
                 
                 {#if error}
                     <p class="text-xs text-red-500 dark:text-red-300">{error}</p>

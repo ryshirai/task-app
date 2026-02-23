@@ -18,11 +18,11 @@ use worker::{Request, Response, Result as WorkerResult, RouteContext};
 const JWT_EXPIRATION_HOURS: i64 = 24;
 const PASSWORD_RESET_EXPIRATION_HOURS: i64 = 1;
 
-const INVALID_CREDENTIALS_MESSAGE: &str = "Invalid username or password";
+const INVALID_CREDENTIALS_MESSAGE: &str = "ユーザー名またはパスワードが正しくありません";
 const INVALID_USERNAME_MESSAGE: &str =
-    "Username must contain only alphanumeric characters, underscores, or hyphens";
+    "ユーザー名は3文字以上30文字以内で、英数字、アンダースコア、ハイフンのみ使用できます";
 const INVALID_PASSWORD_MESSAGE: &str =
-    "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol";
+    "パスワードは8文字以上で、英大文字、小文字、数字、記号を含む必要があります";
 
 #[derive(Serialize)]
 struct ErrorBody {
@@ -381,48 +381,46 @@ pub async fn forgot_password(
     };
 
     let result = async {
-        let user = d1_query_one::<User>(
+        let user_opt = d1_query_one::<User>(
             &ctx.data.db,
             "SELECT id, organization_id, name, username, email, pending_email, avatar_url, role, email_verified, created_at
              FROM users
-             WHERE username = ?1
+             WHERE username = ?1 OR email = ?1
              LIMIT 1",
-            &[D1Param::Text(input.username.clone())],
-        )
-        .await?
-        .ok_or_else(|| ApiError::new(404, "User not found"))?;
-
-        let token = uuid::Uuid::new_v4().to_string();
-        let expires_at = (Utc::now() + Duration::hours(PASSWORD_RESET_EXPIRATION_HOURS)).to_rfc3339();
-
-        d1_execute(
-            &ctx.data.db,
-            "INSERT INTO password_resets (user_id, token, expires_at) VALUES (?1, ?2, ?3)",
-            &[
-                D1Param::Integer(user.id),
-                D1Param::Text(token.clone()),
-                D1Param::Text(expires_at),
-            ],
+            &[D1Param::Text(input.identity.clone())],
         )
         .await?;
 
-        let recipient = user
-            .email
-            .clone()
-            .or_else(|| user.username.clone())
-            .ok_or_else(|| {
-                ApiError::new(
-                    400,
-                    "User has no email or username to send reset instructions",
-                )
-            })?;
+        if let Some(user) = user_opt {
+            let token = uuid::Uuid::new_v4().to_string();
+            let expires_at = (Utc::now() + Duration::hours(PASSWORD_RESET_EXPIRATION_HOURS)).to_rfc3339();
 
-        ctx.data
-            .email_service
-            .send_password_reset_email(&recipient, &token)
-            .await
-            .map_err(ApiError::internal)?;
+            d1_execute(
+                &ctx.data.db,
+                "INSERT INTO password_resets (user_id, token, expires_at) VALUES (?1, ?2, ?3)",
+                &[
+                    D1Param::Integer(user.id),
+                    D1Param::Text(token.clone()),
+                    D1Param::Text(expires_at),
+                ],
+            )
+            .await?;
 
+            let recipient = user
+                .email
+                .clone()
+                .or_else(|| user.username.clone())
+                .unwrap_or_default();
+
+            if !recipient.is_empty() {
+                let _ = ctx.data
+                    .email_service
+                    .send_password_reset_email(&recipient, &token)
+                    .await;
+            }
+        }
+
+        // Always return OK to prevent user enumeration
         json_with_status(&json!({ "status": "ok" }), 200)
     }
     .await;

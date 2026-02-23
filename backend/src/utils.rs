@@ -10,6 +10,10 @@ pub fn is_valid_email(email: &str) -> bool {
 }
 
 pub fn is_valid_username(username: &str) -> bool {
+    let len = username.len();
+    if len < 3 || len > 30 {
+        return false;
+    }
     username
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
@@ -74,8 +78,12 @@ mod tests {
     }
 
     #[test]
-    fn treats_empty_string_as_valid_current_behavior() {
-        assert!(is_valid_username(""));
+    fn rejects_usernames_outside_length_bounds() {
+        assert!(!is_valid_username(""));
+        assert!(!is_valid_username("ab"));
+        assert!(is_valid_username("abc"));
+        assert!(is_valid_username("a23456789012345678901234567890"));
+        assert!(!is_valid_username("a234567890123456789012345678901"));
     }
 
     #[test]

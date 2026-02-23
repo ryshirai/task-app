@@ -11,17 +11,6 @@
     let error = '';
     let loading = false;
 
-    function translateLoginError(message: string): string {
-        const normalized = message.toLowerCase();
-        if (normalized.includes('invalid username or password')) {
-            return 'ユーザー名またはパスワードが正しくありません';
-        }
-        if (normalized.includes('invalid credentials')) {
-            return 'ログイン情報が正しくありません';
-        }
-        return message || 'ログインに失敗しました';
-    }
-
     async function handleLogin() {
         loading = true;
         error = '';
@@ -33,15 +22,15 @@
             });
 
             if (!res.ok) {
-                const data = await res.text();
-                throw new Error(data || 'ログインに失敗しました');
+                const data = await res.json();
+                throw new Error(data.error || 'ログインに失敗しました');
             }
 
             const data = await res.json();
             auth.set({ token: data.token, user: data.user, initialized: true });
             dispatch('loginSuccess');
         } catch (e: any) {
-            error = translateLoginError(e.message);
+            error = e.message;
         } finally {
             loading = false;
         }

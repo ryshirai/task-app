@@ -143,22 +143,11 @@ fn query_pairs(req: &Request) -> Result<HashMap<String, String>, ApiError> {
     let url = req
         .url()
         .map_err(|e| ApiError::new(400, format!("invalid url: {e}")))?;
+    
     let mut pairs = HashMap::new();
-
-    if let Some(query) = url.query() {
-        for pair in query.split('&') {
-            if pair.is_empty() {
-                continue;
-            }
-
-            if let Some((k, v)) = pair.split_once('=') {
-                pairs.insert(k.to_string(), v.to_string());
-            } else {
-                pairs.insert(pair.to_string(), String::new());
-            }
-        }
+    for (k, v) in url.query_pairs() {
+        pairs.insert(k.into_owned(), v.into_owned());
     }
-
     Ok(pairs)
 }
 
@@ -245,7 +234,7 @@ fn csv_escape(value: &str) -> String {
 }
 
 fn logs_to_csv(logs: &[ActivityLog]) -> String {
-    let mut csv = String::from("Date,User,Action,Target Type,Target ID,Details\n");
+    let mut csv = String::from("日時,ユーザー,操作,対象種別,対象ID,詳細\n");
 
     for log in logs {
         let date = csv_escape(&log.created_at);
