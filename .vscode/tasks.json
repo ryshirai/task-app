@@ -14,7 +14,7 @@
     {
         "label": "Glance: Start Backend (Rust)",
         "type": "shell",
-        "command": "cd backend && cargo run",
+        "command": "cd backend && cargo build && npx wrangler dev --local",
         "group": "active",
         "problemMatcher": ["$rustc"],
         "dependsOn": ["Glance: Start DB (Docker)"],
@@ -25,7 +25,7 @@
     {
         "label": "Glance: Start Frontend (Svelte)",
         "type": "shell",
-        "command": "cd frontend && npm run dev",
+        "command": "cd frontend && npm run dev -- --host",
         "group": "active",
         "problemMatcher": [],
         "presentation": {
