@@ -43,6 +43,7 @@ export interface User {
     name: string;
     username: string;
     email?: string;
+    email_verified: number;
     avatar_url?: string;
     role: UserRole;
     time_logs?: TaskTimeLog[];

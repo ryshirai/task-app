@@ -188,6 +188,7 @@ pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             .post_async("/api/auth/forgot-password", auth::forgot_password)
             .post_async("/api/auth/reset-password", auth::reset_password)
             .post_async("/api/auth/verify-email", auth::verify_email)
+            .post_async("/api/auth/resend-verification", auth::resend_verification)
             .post_async("/api/invitations", invitations::create_invitation)
             .get_async("/api/invitations/:token", invitations::get_invitation)
             .get_async("/api/tasks", tasks::get_tasks)

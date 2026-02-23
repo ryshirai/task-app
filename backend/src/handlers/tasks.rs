@@ -417,11 +417,15 @@ fn task_select_sql() -> &'static str {
     "SELECT t.id, t.organization_id, t.member_id, t.title, t.description, t.status, t.progress_rate,
             NULLIF(GROUP_CONCAT(DISTINCT tg.name), '') AS tags,
             t.created_at, t.updated_at,
-            COALESCE(SUM(l.duration_minutes), 0) AS total_duration_minutes
+            COALESCE((
+                SELECT SUM(l.duration_minutes)
+                FROM task_time_logs l
+                WHERE l.task_id = t.id
+                  AND l.organization_id = t.organization_id
+            ), 0) AS total_duration_minutes
      FROM tasks t
      LEFT JOIN task_tags tt ON t.id = tt.task_id
-     LEFT JOIN tags tg ON tt.tag_id = tg.id
-     LEFT JOIN task_time_logs l ON l.task_id = t.id AND l.organization_id = t.organization_id"
+     LEFT JOIN tags tg ON tt.tag_id = tg.id"
 }
 
 async fn fetch_task_by_id(
@@ -851,18 +855,35 @@ pub async fn get_tasks(req: Request, ctx: RouteContext<AppState>) -> WorkerResul
         let claims = extract_claims(&req, &ctx).await?;
         let query = parse_get_tasks_query(&req)?;
 
-        let mut sql = String::from(
+        let mut params = Vec::new();
+        let duration_subquery = if let Some(date) = query.date.as_ref() {
+            params.push(D1Param::Text(date.clone()));
+            params.push(D1Param::Text(date.clone()));
+            "(SELECT COALESCE(SUM(l_dur.duration_minutes), 0)
+              FROM task_time_logs l_dur
+              WHERE l_dur.task_id = t.id
+                AND l_dur.organization_id = t.organization_id
+                AND date(datetime(l_dur.start_at, '+9 hours')) <= ?
+                AND date(datetime(l_dur.end_at, '+9 hours')) >= ?)"
+        } else {
+            "(SELECT COALESCE(SUM(l_dur.duration_minutes), 0)
+              FROM task_time_logs l_dur
+              WHERE l_dur.task_id = t.id
+                AND l_dur.organization_id = t.organization_id)"
+        };
+
+        let mut sql = format!(
             "SELECT t.id, t.organization_id, t.member_id, t.title, t.description, t.status, t.progress_rate,
                     NULLIF(GROUP_CONCAT(DISTINCT tg.name), '') AS tags,
                     t.created_at, t.updated_at,
-                    COALESCE(SUM(l.duration_minutes), 0) AS total_duration_minutes
+                    {} AS total_duration_minutes
              FROM tasks t
-             LEFT JOIN task_time_logs l ON l.task_id = t.id AND l.organization_id = t.organization_id
              LEFT JOIN task_tags tt ON t.id = tt.task_id
              LEFT JOIN tags tg ON tt.tag_id = tg.id
              WHERE t.organization_id = ?",
+            duration_subquery
         );
-        let mut params = vec![D1Param::Integer(claims.organization_id)];
+        params.push(D1Param::Integer(claims.organization_id));
 
         if let Some(member_id) = query.member_id {
             sql.push_str(" AND t.member_id = ?");

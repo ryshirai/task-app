@@ -1,7 +1,7 @@
 <script lang="ts">
   import { apiFetch } from '$lib/api';
   import { createEventDispatcher, onMount } from 'svelte';
-  import { auth } from '$lib/auth';
+  import { auth, updateEmail } from '$lib/auth';
 
   const dispatch = createEventDispatcher();
 
@@ -14,6 +14,10 @@
   let loading = false;
   let error = '';
   let success = false;
+  let newEmail = '';
+  let emailLoading = false;
+  let emailError = '';
+  let emailSuccess = false;
   let dialog: HTMLDialogElement;
 
   function isSecurePassword(value: string): boolean {
@@ -68,6 +72,38 @@
     }
   }
 
+  /** Validates and submits an email update request for the current user. */
+  async function handleUpdateEmail() {
+    const normalizedEmail = newEmail.trim();
+    if (!normalizedEmail) {
+      emailError = '新しいメールアドレスを入力してください。';
+      return;
+    }
+    if (normalizedEmail === $auth.user?.email) {
+      emailError = '現在のメールアドレスとは異なるメールアドレスを入力してください。';
+      return;
+    }
+
+    emailLoading = true;
+    emailError = '';
+    emailSuccess = false;
+
+    try {
+      const res = await updateEmail(normalizedEmail);
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || 'メールアドレスの変更に失敗しました。');
+      }
+
+      emailSuccess = true;
+      newEmail = '';
+    } catch (e: any) {
+      emailError = e.message;
+    } finally {
+      emailLoading = false;
+    }
+  }
+
   onMount(() => {
     dialog.showModal();
   });
@@ -95,6 +131,47 @@
             <p class="text-lg font-bold text-text-base">{$auth.user?.name}</p>
             <p class="font-mono text-xs text-text-muted">@{$auth.user?.username}</p>
         </div>
+      </div>
+
+      <div class="border-t border-border-base pt-4">
+        <h4 class="mb-3 text-xs font-bold uppercase tracking-widest text-text-muted">Email Address Change</h4>
+        <form on:submit|preventDefault={handleUpdateEmail} class="space-y-3">
+          <div>
+            <p class="mb-1 block text-[10px] font-bold uppercase text-text-muted">現在のメールアドレス</p>
+            <p class="rounded-lg border border-border-base bg-surface-secondary px-3 py-2 text-sm text-text-base">
+              {$auth.user?.email ?? '未設定'}
+            </p>
+          </div>
+          <div>
+            <label for="new-email" class="mb-1 block text-[10px] font-bold uppercase text-text-muted">新しいメールアドレス</label>
+            <input
+              id="new-email"
+              type="email"
+              bind:value={newEmail}
+              class="w-full rounded-lg border border-border-base bg-surface-secondary px-3 py-2 text-sm text-text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="example@company.com"
+              required
+            />
+          </div>
+
+          {#if emailError}
+            <p class="text-xs font-bold text-red-500">{emailError}</p>
+          {/if}
+          {#if emailSuccess}
+            <p class="flex items-center gap-1 text-xs font-bold text-emerald-600">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              認証メールを送信しました。新しいメールアドレスを確認してください。
+            </p>
+          {/if}
+
+          <button
+            type="submit"
+            disabled={emailLoading || emailSuccess}
+            class="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-blue-700 disabled:opacity-50"
+          >
+            {emailLoading ? '送信中...' : 'メールアドレスを変更'}
+          </button>
+        </form>
       </div>
 
       <div class="border-t border-border-base pt-2">
